@@ -1,5 +1,5 @@
 -- Enable RLS
-ALTER DATABASE postgres SET "app.jwt_secret" TO 'your-jwt-secret';
+ALTER DATABASE postgres SET "app.jwt_secret" TO 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlsZGt2dWpxaHdybnpkbnJleWVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxMzQ2MzEsImV4cCI6MjA2NTcxMDYzMX0.2n46CzPfrSKsZz_ar_GTIvhXlXJ9G5WMg6BA1DFK-1U';
 
 -- Create profiles table
 CREATE TABLE IF NOT EXISTS profiles (
