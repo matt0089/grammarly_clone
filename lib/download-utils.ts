@@ -10,8 +10,8 @@ export interface DownloadableDocument {
 /**
  * Downloads a single document as a file
  */
-export function downloadDocument(document: DownloadableDocument): void {
-  const { title, content, file_type } = document
+export function downloadDocument(doc: DownloadableDocument): void {
+  const { title, content, file_type } = doc
 
   // Create timestamp for filename
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5)
@@ -26,12 +26,12 @@ export function downloadDocument(document: DownloadableDocument): void {
   const blob = new Blob([content], { type: getContentType(file_type) })
   const url = URL.createObjectURL(blob)
 
-  const link = document.createElement("a")
+  const link = window.document.createElement("a")
   link.href = url
   link.download = filename
-  document.body.appendChild(link)
+  window.document.body.appendChild(link)
   link.click()
-  document.body.removeChild(link)
+  window.document.body.removeChild(link)
 
   // Clean up the URL object
   URL.revokeObjectURL(url)
@@ -48,8 +48,8 @@ export async function downloadDocumentsAsZip(documents: DownloadableDocument[]):
   const usedFilenames = new Set<string>()
 
   // Add each document to the ZIP
-  documents.forEach((document) => {
-    const { title, content, file_type } = document
+  documents.forEach((doc) => {
+    const { title, content, file_type } = doc
     const extension = getFileExtension(file_type)
     let filename = `${sanitizeFilename(title)}.${extension}`
 
@@ -69,12 +69,12 @@ export async function downloadDocumentsAsZip(documents: DownloadableDocument[]):
 
   // Download ZIP file
   const url = URL.createObjectURL(zipBlob)
-  const link = document.createElement("a")
+  const link = window.document.createElement("a")
   link.href = url
   link.download = zipFilename
-  document.body.appendChild(link)
+  window.document.body.appendChild(link)
   link.click()
-  document.body.removeChild(link)
+  window.document.body.removeChild(link)
 
   // Clean up
   URL.revokeObjectURL(url)
