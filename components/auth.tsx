@@ -87,7 +87,7 @@ export function Auth({ onAuthChange }: AuthProps) {
           <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center mx-auto mb-4">
             <User className="w-6 h-6 text-white" />
           </div>
-          <CardTitle className="text-2xl">Welcome to Writing Assistant</CardTitle>
+          <CardTitle className="text-2xl">Welcome to DocWiseAI</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">
