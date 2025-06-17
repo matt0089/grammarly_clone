@@ -8,7 +8,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertCircle, CheckCircle2, Lightbulb, Target, BookOpen, FileText, Settings, LogOut, Save } from "lucide-react"
+import {
+  AlertCircle,
+  CheckCircle2,
+  Lightbulb,
+  Target,
+  BookOpen,
+  FileText,
+  Settings,
+  LogOut,
+  Save,
+  MessageSquare,
+  Edit,
+  AlignLeft,
+} from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
@@ -18,7 +31,15 @@ type Document = Database["public"]["Tables"]["documents"]["Row"]
 
 interface Suggestion {
   id: string
-  type: "grammar" | "spelling" | "style" | "clarity"
+  type:
+    | "grammar"
+    | "spelling"
+    | "style"
+    | "clarity"
+    | "conciseness"
+    | "active-voice"
+    | "word-choice"
+    | "sentence-structure"
   severity: "error" | "warning" | "suggestion"
   text: string
   replacement: string
@@ -27,6 +48,7 @@ interface Suggestion {
 }
 
 const GRAMMAR_RULES = [
+  // Original Grammar Rules
   {
     pattern: /\bthere\s+is\s+(\w+)\s+(\w+s)\b/gi,
     replacement: "there are $1 $2",
@@ -45,6 +67,8 @@ const GRAMMAR_RULES = [
     type: "grammar" as const,
     explanation: 'Use "it\'s" (it is) instead of "its"',
   },
+
+  // Original Spelling Rules
   {
     pattern: /\b(recieve|recieved|recieving)\b/gi,
     replacement: (match: string) => match.replace("ie", "ei"),
@@ -58,17 +82,185 @@ const GRAMMAR_RULES = [
     type: "spelling" as const,
     explanation: 'Correct spelling is "separate"',
   },
+
+  // Original Style Rules
   {
     pattern: /\bvery\s+(\w+)\b/gi,
     replacement: "$1",
     type: "style" as const,
     explanation: 'Consider removing "very" for more concise writing',
   },
+
+  // Original Clarity Rules
   {
     pattern: /\bin\s+order\s+to\b/gi,
     replacement: "to",
     type: "clarity" as const,
     explanation: 'Simply use "to" instead of "in order to"',
+  },
+
+  // New Conciseness Rules
+  {
+    pattern: /\bat\s+this\s+point\s+in\s+time\b/gi,
+    replacement: "now",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "now"',
+  },
+  {
+    pattern: /\bdue\s+to\s+the\s+fact\s+that\b/gi,
+    replacement: "because",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "because"',
+  },
+  {
+    pattern: /\bin\s+spite\s+of\s+the\s+fact\s+that\b/gi,
+    replacement: "although",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "although"',
+  },
+  {
+    pattern: /\bfor\s+the\s+purpose\s+of\b/gi,
+    replacement: "to",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "to"',
+  },
+  {
+    pattern: /\ba\s+large\s+number\s+of\b/gi,
+    replacement: "many",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "many"',
+  },
+  {
+    pattern: /\bmake\s+a\s+decision\b/gi,
+    replacement: "decide",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "decide"',
+  },
+  {
+    pattern: /\bcome\s+to\s+a\s+conclusion\b/gi,
+    replacement: "conclude",
+    type: "conciseness" as const,
+    explanation: 'Replace wordy phrase with "conclude"',
+  },
+
+  // Active Voice Rules
+  {
+    pattern: /\bit\s+is\s+recommended\s+that\b/gi,
+    replacement: "I recommend that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for stronger recommendations",
+  },
+  {
+    pattern: /\bit\s+can\s+be\s+seen\s+that\b/gi,
+    replacement: "you can see that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for clearer observations",
+  },
+  {
+    pattern: /\bit\s+should\s+be\s+noted\s+that\b/gi,
+    replacement: "note that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for stronger statements",
+  },
+  {
+    pattern: /\bit\s+is\s+believed\s+that\b/gi,
+    replacement: "we believe that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for stronger statements",
+  },
+  {
+    pattern: /\bit\s+has\s+been\s+found\s+that\b/gi,
+    replacement: "research shows that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for clearer findings",
+  },
+  {
+    pattern: /\bmistakes\s+were\s+made\b/gi,
+    replacement: "I made mistakes",
+    type: "active-voice" as const,
+    explanation: "Use active voice to take responsibility",
+  },
+
+  // Word Choice Rules
+  {
+    pattern: /\butilize\b/gi,
+    replacement: "use",
+    type: "word-choice" as const,
+    explanation: 'Use "use" instead of "utilize" for simplicity',
+  },
+  {
+    pattern: /\bcommence\b/gi,
+    replacement: "begin",
+    type: "word-choice" as const,
+    explanation: 'Use "begin" instead of "commence" for clarity',
+  },
+  {
+    pattern: /\bterminate\b/gi,
+    replacement: "end",
+    type: "word-choice" as const,
+    explanation: 'Use "end" instead of "terminate" for simplicity',
+  },
+  {
+    pattern: /\bfacilitate\b/gi,
+    replacement: "help",
+    type: "word-choice" as const,
+    explanation: 'Use "help" instead of "facilitate" for clarity',
+  },
+  {
+    pattern: /\bdemonstrate\b/gi,
+    replacement: "show",
+    type: "word-choice" as const,
+    explanation: 'Use "show" instead of "demonstrate" for simplicity',
+  },
+  {
+    pattern: /\bindicate\b/gi,
+    replacement: "show",
+    type: "word-choice" as const,
+    explanation: 'Use "show" instead of "indicate" for clarity',
+  },
+  {
+    pattern: /\bnumerous\b/gi,
+    replacement: "many",
+    type: "word-choice" as const,
+    explanation: 'Use "many" instead of "numerous" for simplicity',
+  },
+  {
+    pattern: /\bsubsequently\b/gi,
+    replacement: "then",
+    type: "word-choice" as const,
+    explanation: 'Use "then" instead of "subsequently" for clarity',
+  },
+
+  // Sentence Structure Rules
+  {
+    pattern: /\bnot\s+un(\w+)\b/gi,
+    replacement: (match, word) => word,
+    type: "sentence-structure" as const,
+    explanation: "Avoid double negatives for clearer writing",
+  },
+  {
+    pattern: /\bthat\s+that\b/gi,
+    replacement: "that",
+    type: "sentence-structure" as const,
+    explanation: "Remove redundant 'that'",
+  },
+  {
+    pattern: /\bthere\s+is\s+no\s+doubt\s+that\b/gi,
+    replacement: "clearly",
+    type: "sentence-structure" as const,
+    explanation: 'Replace wordy construction with "clearly"',
+  },
+  {
+    pattern: /\bit\s+is\s+important\s+to\s+note\s+that\b/gi,
+    replacement: "importantly",
+    type: "sentence-structure" as const,
+    explanation: 'Replace wordy construction with "importantly"',
+  },
+  {
+    pattern: /\bthere\s+(?:is|are)\s+(?:a|an|the)?\s*(\w+)\s+that\b/gi,
+    replacement: "the $1",
+    type: "sentence-structure" as const,
+    explanation: 'Avoid "there is/are" constructions for stronger writing',
   },
 ]
 
@@ -195,9 +387,23 @@ export default function GrammarlyClone() {
 
   const getSuggestionIcon = (type: string, severity: string) => {
     if (severity === "error") return <AlertCircle className="w-4 h-4 text-red-500" />
-    if (type === "style") return <Lightbulb className="w-4 h-4 text-blue-500" />
-    if (type === "clarity") return <Target className="w-4 h-4 text-green-500" />
-    return <BookOpen className="w-4 h-4 text-yellow-500" />
+
+    switch (type) {
+      case "style":
+        return <Lightbulb className="w-4 h-4 text-blue-500" />
+      case "clarity":
+        return <Target className="w-4 h-4 text-green-500" />
+      case "conciseness":
+        return <FileText className="w-4 h-4 text-purple-500" />
+      case "active-voice":
+        return <MessageSquare className="w-4 h-4 text-orange-500" />
+      case "word-choice":
+        return <Edit className="w-4 h-4 text-cyan-500" />
+      case "sentence-structure":
+        return <AlignLeft className="w-4 h-4 text-indigo-500" />
+      default:
+        return <BookOpen className="w-4 h-4 text-yellow-500" />
+    }
   }
 
   if (!user) {
@@ -344,8 +550,8 @@ export default function GrammarlyClone() {
                             {getSuggestionIcon(suggestion.type, suggestion.severity)}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {suggestion.type}
+                                <Badge variant={suggestion.type as any} className="text-xs">
+                                  {suggestion.type.replace("-", " ")}
                                 </Badge>
                                 <Badge
                                   variant={suggestion.severity === "error" ? "destructive" : "secondary"}
