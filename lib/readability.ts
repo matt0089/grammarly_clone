@@ -1,103 +1,139 @@
 /**
- * Calculate Flesch Reading Ease score
+ * Calculates the Flesch Reading Ease score for a given text
  * Formula: 206.835 - (1.015 × ASL) - (84.6 × ASW)
  * Where ASL = Average Sentence Length, ASW = Average Syllables per Word
  */
-export function calculateFleschReadingEase(text: string): number {
-  // Handle edge cases
-  if (!text || text.trim().length === 0) {
-    return 0
-  }
 
-  const cleanText = text.trim()
+export interface ReadabilityResult {
+  score: number
+  level: "very-easy" | "easy" | "fairly-easy" | "standard" | "fairly-difficult" | "difficult" | "very-difficult"
+  color: "green" | "yellow" | "red"
+  description: string
+}
 
-  // Count sentences (periods, exclamation marks, question marks)
-  const sentences = cleanText.split(/[.!?]+/).filter((s) => s.trim().length > 0)
-  const sentenceCount = Math.max(sentences.length, 1) // Avoid division by zero
+export function calculateFleschReadingEase(text: string): ReadabilityResult | null {
+  // Clean and preprocess text
+  const cleanText = preprocessText(text)
 
-  // Count words (split by whitespace, filter out empty strings)
-  const words = cleanText.split(/\s+/).filter((word) => word.length > 0)
+  // Count words (excluding punctuation and formatting)
+  const words = getWords(cleanText)
   const wordCount = words.length
 
-  // Handle very short texts
-  if (wordCount === 0) {
-    return 0
+  // Return null if less than 30 words
+  if (wordCount < 30) {
+    return null
   }
 
-  if (wordCount < 3) {
-    return 100 // Very short texts are considered easy to read
-  }
+  // Count sentences
+  const sentenceCount = getSentenceCount(cleanText)
 
   // Count syllables
-  let syllableCount = 0
-  for (const word of words) {
-    syllableCount += countSyllables(word)
-  }
+  const totalSyllables = words.reduce((total, word) => total + countSyllables(word), 0)
 
   // Calculate averages
   const averageSentenceLength = wordCount / sentenceCount
-  const averageSyllablesPerWord = syllableCount / wordCount
+  const averageSyllablesPerWord = totalSyllables / wordCount
 
   // Calculate Flesch Reading Ease score
-  const score = 206.835 - 1.015 * averageSentenceLength - 84.6 * averageSyllablesPerWord
+  const score = Math.round(206.835 - 1.015 * averageSentenceLength - 84.6 * averageSyllablesPerWord)
 
-  // Clamp score between 0 and 100
-  return Math.max(0, Math.min(100, Math.round(score * 10) / 10))
+  // Ensure score is within 0-100 range
+  const clampedScore = Math.max(0, Math.min(100, score))
+
+  return {
+    score: clampedScore,
+    ...getScoreMetadata(clampedScore),
+  }
 }
 
-/**
- * Count syllables in a word using a simplified algorithm
- */
+function preprocessText(text: string): string {
+  // Remove extra whitespace and normalize
+  return text
+    .replace(/\s+/g, " ") // Replace multiple spaces with single space
+    .replace(/[""'']/g, '"') // Normalize quotes
+    .trim()
+}
+
+function getWords(text: string): string[] {
+  // Extract words, removing punctuation and formatting
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ") // Replace punctuation with spaces
+    .replace(/\s+/g, " ") // Normalize spaces
+    .trim()
+    .split(" ")
+    .filter((word) => word.length > 0)
+}
+
+function getSentenceCount(text: string): number {
+  // Count sentences by looking for sentence-ending punctuation
+  const sentences = text.split(/[.!?]+/).filter((sentence) => sentence.trim().length > 0)
+
+  // Ensure at least 1 sentence for calculation
+  return Math.max(1, sentences.length)
+}
+
 function countSyllables(word: string): number {
-  if (!word || word.length === 0) return 0
+  // Simple syllable counting algorithm
+  word = word.toLowerCase()
 
-  // Convert to lowercase and remove non-alphabetic characters for counting
-  const cleanWord = word.toLowerCase().replace(/[^a-z]/g, "")
+  // Handle empty or very short words
+  if (word.length <= 2) return 1
 
-  if (cleanWord.length === 0) return 0
-  if (cleanWord.length <= 2) return 1
+  // Remove common endings that don't add syllables
+  word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "")
+  word = word.replace(/^y/, "")
 
-  // Count vowel groups (consecutive vowels count as one syllable)
-  let syllables = 0
-  let previousWasVowel = false
+  // Count vowel groups
+  const vowelGroups = word.match(/[aeiouy]+/g)
+  const syllableCount = vowelGroups ? vowelGroups.length : 1
 
-  for (let i = 0; i < cleanWord.length; i++) {
-    const isVowel = "aeiouy".includes(cleanWord[i])
+  // Ensure at least 1 syllable
+  return Math.max(1, syllableCount)
+}
 
-    if (isVowel && !previousWasVowel) {
-      syllables++
+function getScoreMetadata(score: number): Pick<ReadabilityResult, "level" | "color" | "description"> {
+  if (score >= 90) {
+    return {
+      level: "very-easy",
+      color: "green",
+      description: "Very Easy",
     }
-
-    previousWasVowel = isVowel
+  } else if (score >= 80) {
+    return {
+      level: "easy",
+      color: "green",
+      description: "Easy",
+    }
+  } else if (score >= 70) {
+    return {
+      level: "fairly-easy",
+      color: "yellow",
+      description: "Fairly Easy",
+    }
+  } else if (score >= 60) {
+    return {
+      level: "standard",
+      color: "yellow",
+      description: "Standard",
+    }
+  } else if (score >= 50) {
+    return {
+      level: "fairly-difficult",
+      color: "red",
+      description: "Fairly Difficult",
+    }
+  } else if (score >= 30) {
+    return {
+      level: "difficult",
+      color: "red",
+      description: "Difficult",
+    }
+  } else {
+    return {
+      level: "very-difficult",
+      color: "red",
+      description: "Very Difficult",
+    }
   }
-
-  // Handle silent 'e' at the end
-  if (cleanWord.endsWith("e") && syllables > 1) {
-    syllables--
-  }
-
-  // Every word has at least one syllable
-  return Math.max(1, syllables)
-}
-
-/**
- * Get color indicator for Flesch Reading Ease score
- */
-export function getReadabilityColor(score: number): "red" | "yellow" | "green" {
-  if (score >= 60) return "green" // Easy to read
-  if (score >= 30) return "yellow" // Fairly difficult
-  return "red" // Very difficult
-}
-
-/**
- * Get descriptive text for Flesch Reading Ease score
- */
-export function getReadabilityDescription(score: number): string {
-  if (score >= 90) return "Very Easy"
-  if (score >= 80) return "Easy"
-  if (score >= 70) return "Fairly Easy"
-  if (score >= 60) return "Standard"
-  if (score >= 50) return "Fairly Difficult"
-  if (score >= 30) return "Difficult"
-  return "Very Difficult"
 }

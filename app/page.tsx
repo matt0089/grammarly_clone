@@ -11,7 +11,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertCircle, CheckCircle2, Lightbulb, Target, BookOpen, FileText, Settings, LogOut, Save } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
-import { calculateFleschReadingEase, getReadabilityColor, getReadabilityDescription } from "@/lib/readability"
+import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
+import { ReadabilityDisplay } from "@/components/readability-display"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -79,7 +80,7 @@ export default function GrammarlyClone() {
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
-  const [readabilityScore, setReadabilityScore] = useState<number>(0)
+  const [readabilityScore, setReadabilityScore] = useState<ReadabilityResult | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
 
@@ -111,8 +112,8 @@ export default function GrammarlyClone() {
     setSuggestions(newSuggestions)
 
     // Calculate readability score
-    const score = calculateFleschReadingEase(content)
-    setReadabilityScore(score)
+    const readability = calculateFleschReadingEase(content)
+    setReadabilityScore(readability)
   }
 
   const saveDocument = async (content: string) => {
@@ -299,6 +300,7 @@ export default function GrammarlyClone() {
                     {stats.errors + stats.suggestions}
                   </Badge>
                 </div>
+                <ReadabilityDisplay result={readabilityScore} wordCount={stats.words} />
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Words</span>
                   <span className="font-medium">{stats.words}</span>
@@ -306,22 +308,6 @@ export default function GrammarlyClone() {
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Characters</span>
                   <span className="font-medium">{stats.characters}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Readability</span>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        getReadabilityColor(readabilityScore) === "green"
-                          ? "bg-green-500"
-                          : getReadabilityColor(readabilityScore) === "yellow"
-                            ? "bg-yellow-500"
-                            : "bg-red-500"
-                      }`}
-                    />
-                    <span className="font-medium">{readabilityScore}</span>
-                    <span className="text-xs text-gray-500">({getReadabilityDescription(readabilityScore)})</span>
-                  </div>
                 </div>
               </CardContent>
             </Card>
