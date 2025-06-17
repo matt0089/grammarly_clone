@@ -11,6 +11,7 @@ export interface Database {
           user_id: string
           created_at: string
           updated_at: string
+          file_type: string
         }
         Insert: {
           id?: string
@@ -19,6 +20,7 @@ export interface Database {
           user_id: string
           created_at?: string
           updated_at?: string
+          file_type?: string
         }
         Update: {
           id?: string
@@ -27,6 +29,7 @@ export interface Database {
           user_id?: string
           created_at?: string
           updated_at?: string
+          file_type?: string
         }
       }
       profiles: {

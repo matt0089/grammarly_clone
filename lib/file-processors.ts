@@ -2,6 +2,7 @@
 export interface FileProcessor {
   supportedTypes: string[]
   process(file: File): Promise<string>
+  getFileType(filename: string): string // Add this method
 }
 
 // Text file processor
@@ -24,6 +25,10 @@ export class TextFileProcessor implements FileProcessor {
       reader.readAsText(file)
     })
   }
+
+  getFileType(filename: string): string {
+    return "txt"
+  }
 }
 
 // Markdown file processor
@@ -45,6 +50,16 @@ export class MarkdownFileProcessor implements FileProcessor {
 
       reader.readAsText(file)
     })
+  }
+
+  getFileType(filename: string): string {
+    const extension = this.getFileExtension(filename)
+    return extension === ".markdown" ? "markdown" : "md"
+  }
+
+  private getFileExtension(filename: string): string {
+    const lastDotIndex = filename.lastIndexOf(".")
+    return lastDotIndex !== -1 ? filename.slice(lastDotIndex).toLowerCase() : ""
   }
 }
 
@@ -76,6 +91,17 @@ export class FileProcessorRegistry {
     }
 
     return processor.process(file)
+  }
+
+  getFileTypeForFile(filename: string): string {
+    const fileExtension = this.getFileExtension(filename)
+    const processor = this.processors.find((p) => p.supportedTypes.includes(fileExtension))
+
+    if (!processor) {
+      return "txt" // Default fallback
+    }
+
+    return processor.getFileType(filename)
   }
 
   private getFileExtension(filename: string): string {

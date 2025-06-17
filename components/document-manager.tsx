@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Plus, FileText, Trash2, Upload, X } from "lucide-react"
+import { Plus, FileText, Trash2, Upload, X, Download, Archive } from "lucide-react"
 import type { Database } from "@/lib/database.types"
 import { fileProcessorRegistry } from "@/lib/file-processors"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { downloadDocument, downloadDocumentsAsZip, type DownloadableDocument } from "@/lib/download-utils"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -62,6 +63,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
           title: newDocTitle,
           content: "",
           user_id: userId,
+          file_type: "txt", // Default to txt for new documents
         })
         .select()
         .single()
@@ -115,14 +117,16 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
 
       // Process file content
       const content = await fileProcessorRegistry.processFile(file)
+      const fileType = fileProcessorRegistry.getFileTypeForFile(file.name)
 
-      // Create document with original filename
+      // Create document with original filename and file type
       const { data, error } = await supabase
         .from("documents")
         .insert({
           title: file.name,
           content: content,
           user_id: userId,
+          file_type: fileType,
         })
         .select()
         .single()
@@ -141,6 +145,48 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
       event.target.value = ""
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  const handleDownloadDocument = async (document: Document) => {
+    try {
+      // Check if this is the currently selected document with unsaved changes
+      if (selectedDocument?.id === document.id) {
+        // Auto-save current changes before download
+        const currentContent = selectedDocument.content
+        await supabase.from("documents").update({ content: currentContent }).eq("id", document.id)
+
+        // Update local document with current content
+        document.content = currentContent
+      }
+
+      const downloadableDoc: DownloadableDocument = {
+        id: document.id,
+        title: document.title,
+        content: document.content,
+        file_type: document.file_type || "txt",
+      }
+
+      downloadDocument(downloadableDoc)
+    } catch (error) {
+      console.error("Error downloading document:", error)
+    }
+  }
+
+  const handleBulkDownload = async () => {
+    if (documents.length === 0) return
+
+    try {
+      const downloadableDocs: DownloadableDocument[] = documents.map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        content: doc.content,
+        file_type: doc.file_type || "txt",
+      }))
+
+      await downloadDocumentsAsZip(downloadableDocs)
+    } catch (error) {
+      console.error("Error creating bulk download:", error)
     }
   }
 
@@ -198,6 +244,17 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
               </Button>
             </div>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkDownload}
+              disabled={documents.length === 0}
+              className="w-full"
+            >
+              <Archive className="w-4 h-4 mr-2" />
+              Download All ({documents.length})
+            </Button>
+
             {uploadError && (
               <Alert variant="destructive">
                 <AlertDescription className="flex items-center justify-between">
@@ -237,19 +294,35 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
                         <Badge variant="outline" className="text-xs">
                           {document.content.trim().split(/\s+/).length} words
                         </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {document.file_type || "txt"}
+                        </Badge>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteDocument(document.id)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDownloadDocument(document)
+                        }}
+                        title="Download document"
+                      >
+                        <Download className="w-4 h-4 text-blue-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteDocument(document.id)
+                        }}
+                        title="Delete document"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))
