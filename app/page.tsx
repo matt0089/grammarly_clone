@@ -145,24 +145,6 @@ const GRAMMAR_RULES = [
 
   // Active Voice Rules
   {
-    pattern: /\b(is|are|was|were)\s+being\s+(\w+ed)\s+by\b/gi,
-    replacement: (match, beVerb, participle, offset, string) => {
-      // This is a simplified replacement that may not work in all contexts
-      return "someone " + participle
-    },
-    type: "active-voice" as const,
-    explanation: "Consider using active voice for stronger writing",
-  },
-  {
-    pattern: /\b(is|are|was|were)\s+(\w+ed)\s+by\b/gi,
-    replacement: (match, beVerb, participle, offset, string) => {
-      // This is a simplified replacement that may not work in all contexts
-      return "someone " + participle
-    },
-    type: "active-voice" as const,
-    explanation: "Consider using active voice for stronger writing",
-  },
-  {
     pattern: /\bit\s+is\s+recommended\s+that\b/gi,
     replacement: "I recommend that",
     type: "active-voice" as const,
@@ -179,6 +161,24 @@ const GRAMMAR_RULES = [
     replacement: "note that",
     type: "active-voice" as const,
     explanation: "Use active voice for stronger statements",
+  },
+  {
+    pattern: /\bit\s+is\s+believed\s+that\b/gi,
+    replacement: "we believe that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for stronger statements",
+  },
+  {
+    pattern: /\bit\s+has\s+been\s+found\s+that\b/gi,
+    replacement: "research shows that",
+    type: "active-voice" as const,
+    explanation: "Use active voice for clearer findings",
+  },
+  {
+    pattern: /\bmistakes\s+were\s+made\b/gi,
+    replacement: "I made mistakes",
+    type: "active-voice" as const,
+    explanation: "Use active voice to take responsibility",
   },
 
   // Word Choice Rules
