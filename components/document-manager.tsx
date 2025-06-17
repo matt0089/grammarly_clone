@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -7,8 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Plus, FileText, Trash2 } from "lucide-react"
+import { Plus, FileText, Trash2, Upload, X } from "lucide-react"
 import type { Database } from "@/lib/database.types"
+import { fileProcessorRegistry } from "@/lib/file-processors"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -23,6 +27,8 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
   const [loading, setLoading] = useState(true)
   const [newDocTitle, setNewDocTitle] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   useEffect(() => {
     fetchDocuments()
@@ -87,6 +93,57 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
     }
   }
 
+  const uploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setUploadError(null)
+    setIsUploading(true)
+
+    try {
+      // Check file size (1MB limit)
+      const maxSize = 1024 * 1024 // 1MB in bytes
+      if (file.size > maxSize) {
+        throw new Error(`File size exceeds 1MB limit. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`)
+      }
+
+      // Check file type
+      if (!fileProcessorRegistry.isSupported(file.name)) {
+        const supportedTypes = fileProcessorRegistry.getSupportedTypes().join(", ")
+        throw new Error(`Unsupported file type. Supported formats: ${supportedTypes}`)
+      }
+
+      // Process file content
+      const content = await fileProcessorRegistry.processFile(file)
+
+      // Create document with original filename
+      const { data, error } = await supabase
+        .from("documents")
+        .insert({
+          title: file.name,
+          content: content,
+          user_id: userId,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setDocuments([data, ...documents])
+      onSelectDocument(data)
+
+      // Reset file input
+      event.target.value = ""
+    } catch (error) {
+      console.error("Error uploading file:", error)
+      setUploadError(error instanceof Error ? error.message : "Failed to upload file")
+      // Reset file input on error
+      event.target.value = ""
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -107,16 +164,50 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
       </CardHeader>
       <CardContent className="p-0">
         <div className="p-4 border-b">
-          <div className="flex gap-2">
-            <Input
-              placeholder="New document title..."
-              value={newDocTitle}
-              onChange={(e) => setNewDocTitle(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && createDocument()}
-            />
-            <Button onClick={createDocument} disabled={isCreating || !newDocTitle.trim()}>
-              <Plus className="w-4 h-4" />
-            </Button>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="New document title..."
+                value={newDocTitle}
+                onChange={(e) => setNewDocTitle(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && createDocument()}
+              />
+              <Button onClick={createDocument} disabled={isCreating || !newDocTitle.trim()}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                id="file-upload"
+                className="hidden"
+                accept=".txt,.md,.markdown"
+                onChange={uploadFile}
+                disabled={isUploading}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById("file-upload")?.click()}
+                disabled={isUploading}
+                className="w-full"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {isUploading ? "Uploading..." : "Upload File"}
+              </Button>
+            </div>
+
+            {uploadError && (
+              <Alert variant="destructive">
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{uploadError}</span>
+                  <Button variant="ghost" size="sm" onClick={() => setUploadError(null)} className="h-auto p-1">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </div>
         <ScrollArea className="h-[300px]">
