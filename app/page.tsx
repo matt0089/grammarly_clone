@@ -1,11 +1,18 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { supabase } from "@/lib/supabase"
+import { Auth } from "@/components/auth"
+import { DocumentManager } from "@/components/document-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertCircle, CheckCircle2, Lightbulb, Target, BookOpen, FileText, Settings, User } from "lucide-react"
+import { AlertCircle, CheckCircle2, Lightbulb, Target, BookOpen, FileText, Settings, LogOut, Save } from "lucide-react"
+import type { User as SupabaseUser } from "@supabase/supabase-js"
+import type { Database } from "@/lib/database.types"
+
+type Document = Database["public"]["Tables"]["documents"]["Row"]
 
 interface Suggestion {
   id: string
@@ -63,19 +70,16 @@ const GRAMMAR_RULES = [
   },
 ]
 
-const SAMPLE_TEXT = `Welcome to our writing assistant! This tool will help you improve your writing by catching grammar mistakes, spelling errors, and suggesting style improvements.
-
-There is many features that makes this tool useful. Your welcome to try all of them. Its a good idea to write naturally first, then review the suggestions.
-
-Some common mistakes include words like "recieve" instead of receive, or "seperate" instead of separate. We also catch style issues - for example, using "very good" when "excellent" would be better.
-
-In order to get the best results, write your content first, then review each suggestion carefully.`
-
 export default function GrammarlyClone() {
-  const [text, setText] = useState(SAMPLE_TEXT)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
+  const [text, setText] = useState("")
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout>()
 
   const checkText = (content: string) => {
     const newSuggestions: Suggestion[] = []
@@ -105,6 +109,38 @@ export default function GrammarlyClone() {
     setSuggestions(newSuggestions)
   }
 
+  const saveDocument = async (content: string) => {
+    if (!selectedDocument || !user) return
+
+    setIsSaving(true)
+    try {
+      const { error } = await supabase.from("documents").update({ content }).eq("id", selectedDocument.id)
+
+      if (error) throw error
+      setLastSaved(new Date())
+    } catch (error) {
+      console.error("Error saving document:", error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleTextChange = (newText: string) => {
+    setText(newText)
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Auto-save after 2 seconds of inactivity
+    if (selectedDocument) {
+      saveTimeoutRef.current = setTimeout(() => {
+        saveDocument(newText)
+      }, 2000)
+    }
+  }
+
   useEffect(() => {
     const timer = setTimeout(() => {
       checkText(text)
@@ -113,10 +149,18 @@ export default function GrammarlyClone() {
     return () => clearTimeout(timer)
   }, [text])
 
+  useEffect(() => {
+    if (selectedDocument) {
+      setText(selectedDocument.content)
+    } else {
+      setText("")
+    }
+  }, [selectedDocument])
+
   const applySuggestion = (suggestion: Suggestion) => {
     const newText =
       text.slice(0, suggestion.position.start) + suggestion.replacement + text.slice(suggestion.position.end)
-    setText(newText)
+    handleTextChange(newText)
     setSelectedSuggestion(null)
   }
 
@@ -125,37 +169,18 @@ export default function GrammarlyClone() {
     setSelectedSuggestion(null)
   }
 
-  const getHighlightedText = () => {
-    if (suggestions.length === 0) return text
-
-    let result = text
-    let offset = 0
-
-    // Sort suggestions by position to apply highlights correctly
-    const sortedSuggestions = [...suggestions].sort((a, b) => a.position.start - b.position.start)
-
-    sortedSuggestions.forEach((suggestion) => {
-      const start = suggestion.position.start + offset
-      const end = suggestion.position.end + offset
-      const originalText = result.slice(start, end)
-
-      const severityClass = {
-        error: "bg-red-100 border-b-2 border-red-500 text-red-800",
-        warning: "bg-yellow-100 border-b-2 border-yellow-500 text-yellow-800",
-        suggestion: "bg-blue-100 border-b-2 border-blue-500 text-blue-800",
-      }[suggestion.severity]
-
-      const highlighted = `<span class="${severityClass} cursor-pointer hover:bg-opacity-80" data-suggestion-id="${suggestion.id}">${originalText}</span>`
-
-      result = result.slice(0, start) + highlighted + result.slice(end)
-      offset += highlighted.length - originalText.length
-    })
-
-    return result
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setSelectedDocument(null)
+    setText("")
   }
 
   const stats = {
-    words: text.trim().split(/\s+/).length,
+    words: text
+      .trim()
+      .split(/\s+/)
+      .filter((word) => word.length > 0).length,
     characters: text.length,
     errors: suggestions.filter((s) => s.severity === "error").length,
     suggestions: suggestions.filter((s) => s.severity === "suggestion").length,
@@ -168,6 +193,10 @@ export default function GrammarlyClone() {
     return <BookOpen className="w-4 h-4 text-yellow-500" />
   }
 
+  if (!user) {
+    return <Auth onAuthChange={setUser} />
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -178,22 +207,42 @@ export default function GrammarlyClone() {
               <CheckCircle2 className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-xl font-semibold text-gray-900">Writing Assistant</h1>
+            {selectedDocument && (
+              <div className="flex items-center gap-2 ml-4">
+                <span className="text-sm text-gray-500">•</span>
+                <span className="text-sm font-medium">{selectedDocument.title}</span>
+                {isSaving && <span className="text-xs text-gray-400">Saving...</span>}
+                {lastSaved && !isSaving && (
+                  <span className="text-xs text-gray-400">Saved {lastSaved.toLocaleTimeString()}</span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">Welcome, {user.email}</span>
             <Button variant="ghost" size="sm">
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Button>
-            <Button variant="ghost" size="sm">
-              <User className="w-4 h-4 mr-2" />
-              Account
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
             </Button>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Document Manager Sidebar */}
+          <div className="lg:col-span-1">
+            <DocumentManager
+              userId={user.id}
+              onSelectDocument={setSelectedDocument}
+              selectedDocument={selectedDocument}
+            />
+          </div>
+
           {/* Main Editor */}
           <div className="lg:col-span-3">
             <Card className="h-[600px]">
@@ -201,11 +250,17 @@ export default function GrammarlyClone() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="w-5 h-5" />
-                    Document
+                    {selectedDocument ? selectedDocument.title : "Select a document"}
                   </CardTitle>
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <span>{stats.words} words</span>
                     <span>{stats.characters} characters</span>
+                    {selectedDocument && (
+                      <Button variant="outline" size="sm" onClick={() => saveDocument(text)} disabled={isSaving}>
+                        <Save className="w-4 h-4 mr-2" />
+                        {isSaving ? "Saving..." : "Save"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -214,9 +269,10 @@ export default function GrammarlyClone() {
                   <textarea
                     ref={editorRef}
                     value={text}
-                    onChange={(e) => setText(e.target.value)}
+                    onChange={(e) => handleTextChange(e.target.value)}
                     className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm leading-relaxed"
-                    placeholder="Start writing here..."
+                    placeholder={selectedDocument ? "Start writing here..." : "Select a document to start writing"}
+                    disabled={!selectedDocument}
                   />
                 </div>
               </CardContent>
@@ -224,7 +280,7 @@ export default function GrammarlyClone() {
           </div>
 
           {/* Suggestions Sidebar */}
-          <div className="space-y-6">
+          <div className="lg:col-span-1 space-y-6">
             {/* Stats Card */}
             <Card>
               <CardHeader className="pb-3">
