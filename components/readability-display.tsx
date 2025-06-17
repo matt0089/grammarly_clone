@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { ReadabilityResult } from "@/lib/readability"
 
 interface ReadabilityDisplayProps {
@@ -36,10 +37,18 @@ export function ReadabilityDisplay({ result, wordCount }: ReadabilityDisplayProp
     <div className="flex justify-between items-center">
       <span className="text-sm text-gray-600">Readability</span>
       <div className="flex items-center gap-2">
-        <span className="font-medium text-sm">{result.score}</span>
-        <Badge variant="outline" className={`text-xs ${getColorClasses(result.color)}`}>
-          {result.description}
-        </Badge>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className={`text-xs cursor-help ${getColorClasses(result.color)}`}>
+                {result.score}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{result.description}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </div>
   )
