@@ -26,22 +26,14 @@ export function Auth({ onAuthChange }: AuthProps) {
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        // Redirect to dashboard instead of calling onAuthChange immediately
-        window.location.href = "/"
-      }
+      onAuthChange(session?.user ?? null)
     })
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        // Redirect to dashboard on sign in
-        window.location.href = "/"
-      } else {
-        onAuthChange(session?.user ?? null)
-      }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      onAuthChange(session?.user ?? null)
     })
 
     return () => subscription.unsubscribe()
