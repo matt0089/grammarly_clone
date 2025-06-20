@@ -24,6 +24,7 @@ import { Settings, LogOut, FileText } from 'lucide-react';
 import Link from 'next/link';
 
 type Document = Database['public']['Tables']['documents']['Row'];
+type Workspace = Database['public']['Tables']['workspaces']['Row'];
 
 /**
  * The main component for the workspace editor page.
@@ -36,9 +37,54 @@ export default function WorkspacePage() {
   const [documentContent, setDocumentContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [readabilityResult, setReadabilityResult] = useState<ReadabilityResult | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const params = useParams();
   const workspaceId = params.workspaceId as string;
   const supabase = createClient();
+
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    // Fetch initial workspace data
+    const fetchWorkspace = async () => {
+      const { data, error } = await supabase
+        .from('workspaces')
+        .select('*')
+        .eq('id', workspaceId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching workspace:', error);
+        toast.error('Failed to load workspace data.');
+      } else {
+        setWorkspace(data);
+      }
+    };
+
+    fetchWorkspace();
+
+    // Set up a real-time subscription
+    const channel = supabase
+      .channel(`workspace-${workspaceId}`)
+      .on<Workspace>(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'workspaces', filter: `id=eq.${workspaceId}` },
+        (payload) => {
+          setWorkspace(payload.new as Workspace);
+          if (payload.new.indexing_status === 'COMPLETED') {
+            toast.success('Repository indexing complete!');
+          } else if (payload.new.indexing_status === 'FAILED') {
+            toast.error('Repository indexing failed.');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+
+  }, [workspaceId, supabase]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -125,6 +171,12 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-3">
           <FileText className="w-6 h-6 text-primary" />
           <h1 className="text-xl font-semibold">DocWise AI</h1>
+          {workspace && (workspace.indexing_status === 'PENDING' || workspace.indexing_status === 'INDEXING') && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
+              <span>Indexing repository...</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <Link href="/dashboard" passHref>

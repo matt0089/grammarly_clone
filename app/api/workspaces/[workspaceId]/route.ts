@@ -79,6 +79,32 @@ export async function PUT(
       github_repo_url,
       git_commit_sha,
     });
+
+    // If a GitHub repo is provided, trigger the indexing job
+    if (github_repo_url && git_commit_sha) {
+      // Clear any existing function declarations
+      await supabase
+        .from('function_declarations')
+        .delete()
+        .eq('workspace_id', workspaceId);
+
+      // Set indexing status to PENDING
+      await supabase
+        .from('workspaces')
+        .update({ indexing_status: 'PENDING' })
+        .eq('id', workspaceId);
+
+      // Asynchronously trigger the indexing job
+      const url = new URL('/api/index-repository', request.url);
+      fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ workspaceId }),
+      });
+    }
+
     return NextResponse.json(updatedWorkspace, { status: 200 });
   } catch (error) {
     console.error(`Error in PUT /api/workspaces/${workspaceId}:`, error);

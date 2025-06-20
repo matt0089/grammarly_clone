@@ -56,6 +56,41 @@ export type Database = {
           },
         ]
       }
+      function_declarations: {
+        Row: {
+          created_at: string | null
+          file_path: string
+          function_name: string
+          id: number
+          line_number: number
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          file_path: string
+          function_name: string
+          id?: number
+          line_number: number
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          file_path?: string
+          function_name?: string
+          id?: number
+          line_number?: number
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "function_declarations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -87,7 +122,10 @@ export type Database = {
         Row: {
           created_at: string | null
           description: string | null
+          git_commit_sha: string | null
+          github_repo_url: string | null
           id: string
+          indexing_status: string | null
           is_default: boolean | null
           name: string
           updated_at: string | null
@@ -96,7 +134,10 @@ export type Database = {
         Insert: {
           created_at?: string | null
           description?: string | null
+          git_commit_sha?: string | null
+          github_repo_url?: string | null
           id?: string
+          indexing_status?: string | null
           is_default?: boolean | null
           name: string
           updated_at?: string | null
@@ -105,7 +146,10 @@ export type Database = {
         Update: {
           created_at?: string | null
           description?: string | null
+          git_commit_sha?: string | null
+          github_repo_url?: string | null
           id?: string
+          indexing_status?: string | null
           is_default?: boolean | null
           name?: string
           updated_at?: string | null
