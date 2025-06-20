@@ -17,9 +17,9 @@ import { generateFunctionDocumentationStream } from '@/lib/ai.server';
  */
 export async function POST(req: NextRequest): Promise<Response> {
   try {
-    const { workspaceId, functionName, documentType } = await req.json();
+    const { workspaceId, functionName, docFormat, documentType, documentGoal } = await req.json();
 
-    if (!workspaceId || !functionName || !documentType) {
+    if (!workspaceId || !functionName || !docFormat || !documentType) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -33,7 +33,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     const stream = await generateFunctionDocumentationStream(
       functionName,
       fileContent,
-      documentType
+      docFormat,
+      documentType,
+      documentGoal
     );
 
     return new Response(stream);

@@ -188,7 +188,9 @@ export default function WorkspacePage() {
         body: JSON.stringify({
           workspaceId,
           functionName: selectedText,
-          documentType: selectedDocument.file_type === 'ts' ? 'TSDoc' : 'JSDoc',
+          docFormat: selectedDocument.file_type === 'ts' ? 'TSDoc' : 'JSDoc',
+          documentType: selectedDocument.document_type || 'General',
+          documentGoal: selectedDocument.document_goal,
         }),
       });
 
