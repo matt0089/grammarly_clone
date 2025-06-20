@@ -1,218 +1,204 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Loader2, CheckCircle, X, RefreshCw, Lightbulb } from "lucide-react"
-import { aiWritingService, type DocumentAnalysis, type WritingSuggestion } from "@/lib/ai-service"
+import { Loader2, CheckCircle, XCircle, RefreshCw, Lightbulb, Zap } from "lucide-react"
+import { aiService, type SuggestionEdit, type DocumentAnalysis } from "@/lib/ai-service"
 import { cn } from "@/lib/utils"
 
 interface SuggestedEditsProps {
   content: string
-  onApplySuggestion: (suggestion: WritingSuggestion) => void
+  onApplySuggestion: (suggestion: SuggestionEdit) => void
+  documentId?: string
 }
 
-export function SuggestedEdits({ content, onApplySuggestion }: SuggestedEditsProps) {
-  const [analysis, setAnalysis] = useState<DocumentAnalysis | null>(null)
+export function SuggestedEdits({ content, onApplySuggestion, documentId }: SuggestedEditsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set())
+  const [analysis, setAnalysis] = useState<DocumentAnalysis | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [lastAnalyzedContent, setLastAnalyzedContent] = useState("")
+  const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set())
 
-  const analyzeContent = async (forceRefresh = false) => {
-    if (!content.trim() || content.length < 50) {
-      setAnalysis({
-        suggestions: [],
-        overallScore: 0,
-        summary: "Write at least 50 characters to get AI suggestions.",
-      })
-      return
-    }
+  const analyzeContent = useCallback(
+    async (text: string) => {
+      if (text === lastAnalyzedContent || text.trim().length < 10) {
+        return
+      }
 
-    // Don't re-analyze the same content unless forced
-    if (!forceRefresh && content === lastAnalyzedContent && analysis) {
-      return
-    }
+      setIsAnalyzing(true)
+      setError(null)
 
-    setIsAnalyzing(true)
-    try {
-      const result = await aiWritingService.analyzeDocument(content)
-      setAnalysis(result)
-      setLastAnalyzedContent(content)
-      setDismissedSuggestions(new Set()) // Reset dismissed suggestions on new analysis
-    } catch (error) {
-      console.error("Error analyzing content:", error)
-      setAnalysis({
-        suggestions: [],
-        overallScore: 0,
-        summary: "Error analyzing document. Please try again.",
-      })
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
+      try {
+        const result = await aiService.analyzeDocument(text, documentId)
+        setAnalysis(result)
+        setLastAnalyzedContent(text)
+        setAppliedSuggestions(new Set()) // Reset applied suggestions for new analysis
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Analysis failed")
+        setAnalysis(null)
+      } finally {
+        setIsAnalyzing(false)
+      }
+    },
+    [documentId, lastAnalyzedContent],
+  )
 
   // Auto-analyze when content changes (debounced)
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (content !== lastAnalyzedContent) {
-        analyzeContent()
+        analyzeContent(content)
       }
-    }, 3000) // Wait 3 seconds after user stops typing
+    }, 2000) // 2 second delay
 
-    return () => clearTimeout(timer)
-  }, [content, lastAnalyzedContent])
+    return () => clearTimeout(timeoutId)
+  }, [content, analyzeContent, lastAnalyzedContent])
 
-  const handleApplySuggestion = (suggestion: WritingSuggestion) => {
+  const handleApplySuggestion = (suggestion: SuggestionEdit) => {
     onApplySuggestion(suggestion)
-    setDismissedSuggestions((prev) => new Set([...prev, suggestion.id]))
+    setAppliedSuggestions((prev) => new Set([...prev, suggestion.id]))
   }
 
-  const handleDismissSuggestion = (suggestionId: string) => {
-    setDismissedSuggestions((prev) => new Set([...prev, suggestionId]))
+  const handleRefreshAnalysis = () => {
+    setLastAnalyzedContent("") // Force re-analysis
+    analyzeContent(content)
   }
 
-  const getSeverityColor = (severity: WritingSuggestion["severity"]) => {
-    switch (severity) {
+  const getConfidenceColor = (confidence: SuggestionEdit["confidence"]) => {
+    switch (confidence) {
       case "high":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "bg-green-100 text-green-800"
       case "medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-yellow-100 text-yellow-800"
       case "low":
-        return "bg-blue-100 text-blue-800 border-blue-200"
+        return "bg-gray-100 text-gray-800"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "bg-gray-100 text-gray-800"
     }
   }
 
-  const getTypeIcon = (type: WritingSuggestion["type"]) => {
-    switch (type) {
-      case "grammar":
-        return "📝"
-      case "style":
-        return "✨"
-      case "clarity":
-        return "🔍"
-      case "tone":
-        return "🎭"
-      case "word-choice":
-        return "📖"
-      default:
-        return "💡"
-    }
-  }
-
-  const visibleSuggestions = analysis?.suggestions.filter((s) => !dismissedSuggestions.has(s.id)) || []
-  const scoreColor = analysis?.overallScore
-    ? analysis.overallScore >= 80
-      ? "text-green-600"
-      : analysis.overallScore >= 60
-        ? "text-yellow-600"
-        : "text-red-600"
-    : "text-gray-400"
+  const availableSuggestions = analysis?.suggestions.filter((s) => !appliedSuggestions.has(s.id)) || []
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <Lightbulb className="w-5 h-5 text-yellow-500" />
-            AI Suggestions
+            Suggested Edits
           </CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => analyzeContent(true)} disabled={isAnalyzing}>
-            {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            {analysis && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Score:</span>
+                <Badge variant="outline" className="text-xs">
+                  {analysis.overallScore}/100
+                </Badge>
+              </div>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleRefreshAnalysis} disabled={isAnalyzing}>
+              <RefreshCw className={cn("w-4 h-4", isAnalyzing && "animate-spin")} />
+            </Button>
+          </div>
         </div>
 
         {analysis && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Writing Score:</span>
-              <span className={cn("font-semibold", scoreColor)}>{analysis.overallScore}/100</span>
-            </div>
             <Progress value={analysis.overallScore} className="h-2" />
-            <p className="text-xs text-gray-500">{analysis.summary}</p>
+            <p className="text-xs text-gray-600">{analysis.summary}</p>
           </div>
         )}
       </CardHeader>
 
-      <CardContent className="pt-0">
-        <ScrollArea className="h-[480px]">
-          {isAnalyzing ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-center">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                <p className="text-sm text-gray-500">Analyzing your writing...</p>
+      <CardContent>
+        <ScrollArea className="h-[520px]">
+          <div className="space-y-3 pr-4">
+            {isAnalyzing && (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
+                  <p className="text-sm text-gray-600">Analyzing your writing...</p>
+                </div>
               </div>
-            </div>
-          ) : visibleSuggestions.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <CheckCircle className="w-6 h-6 text-green-600" />
+            )}
+
+            {error && (
+              <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <XCircle className="w-4 h-4 text-red-500" />
+                  <span className="text-sm font-medium text-red-900">Analysis Error</span>
+                </div>
+                <p className="text-xs text-red-700">{error}</p>
               </div>
-              <p className="text-sm font-medium text-gray-900 mb-1">Great work!</p>
-              <p className="text-xs text-gray-500">
-                {content.length < 50 ? "Write more content to get suggestions" : "No suggestions available"}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3 pr-4">
-              {visibleSuggestions.map((suggestion) => (
+            )}
+
+            {!isAnalyzing && !error && content.trim().length < 10 && (
+              <div className="p-4 text-center text-gray-500">
+                <Zap className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm">Write at least 10 words to get AI-powered suggestions</p>
+              </div>
+            )}
+
+            {!isAnalyzing && !error && availableSuggestions.length === 0 && content.trim().length >= 10 && (
+              <div className="p-4 text-center text-green-600">
+                <CheckCircle className="w-8 h-8 mx-auto mb-2" />
+                <p className="text-sm font-medium">Great writing!</p>
+                <p className="text-xs text-gray-600">No suggestions at this time.</p>
+              </div>
+            )}
+
+            {availableSuggestions.map((suggestion) => {
+              const typeInfo = aiService.getSuggestionTypeInfo(suggestion.type)
+
+              return (
                 <div
                   key={suggestion.id}
-                  className="p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                  className={cn("p-3 rounded-lg border transition-all hover:shadow-sm", typeInfo.bgColor)}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">{getTypeIcon(suggestion.type)}</span>
-                      <Badge variant="outline" className={cn("text-xs", getSeverityColor(suggestion.severity))}>
-                        {suggestion.type}
+                      <Badge variant="outline" className="text-xs">
+                        {typeInfo.label}
                       </Badge>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDismissSuggestion(suggestion.id)}
-                        className="h-6 w-6 p-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
+                      <Badge variant="outline" className={cn("text-xs", getConfidenceColor(suggestion.confidence))}>
+                        {suggestion.confidence}
+                      </Badge>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-xs">
-                      <span className="text-gray-500">Original:</span>
-                      <div className="bg-red-50 p-2 rounded text-red-800 mt-1 font-mono">
-                        "{suggestion.originalText}"
-                      </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Original:</p>
+                      <p className="text-sm bg-white/50 p-2 rounded border">"{suggestion.original}"</p>
                     </div>
 
-                    <div className="text-xs">
-                      <span className="text-gray-500">Suggested:</span>
-                      <div className="bg-green-50 p-2 rounded text-green-800 mt-1 font-mono">
-                        "{suggestion.suggestedText}"
-                      </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Suggested:</p>
+                      <p className="text-sm bg-white/70 p-2 rounded border font-medium">"{suggestion.suggested}"</p>
                     </div>
 
-                    <p className="text-xs text-gray-600">{suggestion.explanation}</p>
+                    <p className={cn("text-xs", typeInfo.textColor)}>{suggestion.explanation}</p>
 
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handleApplySuggestion(suggestion)}
-                      className="w-full mt-2"
-                    >
+                    <Button size="sm" onClick={() => handleApplySuggestion(suggestion)} className="w-full mt-2">
                       Apply Suggestion
                     </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              )
+            })}
+
+            {appliedSuggestions.size > 0 && (
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-sm text-green-800">
+                  ✓ Applied {appliedSuggestions.size} suggestion{appliedSuggestions.size !== 1 ? "s" : ""}
+                </p>
+              </div>
+            )}
+          </div>
         </ScrollArea>
       </CardContent>
     </Card>

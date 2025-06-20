@@ -13,7 +13,7 @@ import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
 import { ReadabilityDisplay } from "@/components/readability-display"
 import { SuggestedEdits } from "@/components/suggested-edits"
-import type { WritingSuggestion } from "@/types/suggestions"
+import type { SuggestionEdit } from "@/lib/ai-service"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -247,18 +247,19 @@ export default function GrammarlyClone() {
               </Card>
             </div>
 
-            {/* AI Suggested Edits Card - Always on the right */}
+            {/* Suggested Edits Card - Always on the right */}
             <div className="w-80 flex-shrink-0">
               <SuggestedEdits
                 content={text}
-                onApplySuggestion={(suggestion: WritingSuggestion) => {
+                onApplySuggestion={(suggestion: SuggestionEdit) => {
                   // Apply the suggestion to the text
-                  const newText =
-                    text.substring(0, suggestion.startIndex) +
-                    suggestion.suggestedText +
-                    text.substring(suggestion.endIndex)
-                  handleTextChange(newText)
+                  const newText = suggestion.suggested
+                  const beforeText = text.slice(0, suggestion.startIndex)
+                  const afterText = text.slice(suggestion.endIndex)
+                  const updatedText = beforeText + newText + afterText
+                  handleTextChange(updatedText)
                 }}
+                documentId={selectedDocument?.id}
               />
             </div>
           </div>

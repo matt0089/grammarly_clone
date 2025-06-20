@@ -1,22 +1,23 @@
-export interface WritingSuggestion {
+export interface SuggestionEdit {
   id: string
-  type: "grammar" | "style" | "clarity" | "tone" | "word-choice"
-  severity: "low" | "medium" | "high"
-  originalText: string
-  suggestedText: string
+  type: "grammar" | "style" | "clarity" | "conciseness" | "tone"
+  original: string
+  suggested: string
   explanation: string
   startIndex: number
   endIndex: number
+  confidence: "high" | "medium" | "low"
 }
 
 export interface DocumentAnalysis {
-  suggestions: WritingSuggestion[]
+  suggestions: SuggestionEdit[]
   overallScore: number
   summary: string
 }
 
 export interface SuggestionState {
-  accepted: boolean
-  dismissed: boolean
-  timestamp: Date
+  isAnalyzing: boolean
+  analysis: DocumentAnalysis | null
+  error: string | null
+  lastAnalyzedContent: string
 }
