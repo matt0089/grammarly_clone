@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { DocumentManager } from '@/components/document-manager';
+import { DocumentMetadataModal } from '@/components/document-metadata-modal';
 import { ReadabilityDisplay } from '@/components/readability-display';
 import { SuggestedEdits } from '@/components/suggested-edits';
 import { Textarea } from '@/components/ui/textarea';
@@ -100,6 +101,11 @@ export default function WorkspacePage() {
     setDocumentContent(newText);
     // The auto-save will pick this change up
   };
+
+  const handleMetadataUpdate = (updatedDocument: Document) => {
+    setSelectedDocument(updatedDocument);
+    toast.success("Document metadata saved!");
+  }
   
   if (!workspaceId) {
     return (
@@ -150,9 +156,12 @@ export default function WorkspacePage() {
             <>
               <div className="flex justify-between items-center mb-4">
                 <h1 className="text-2xl font-bold">{selectedDocument.title}</h1>
-                <Button onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : 'Save'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <DocumentMetadataModal document={selectedDocument} onMetadataUpdate={handleMetadataUpdate} />
+                  <Button onClick={handleSave} disabled={isSaving}>
+                    {isSaving ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
               </div>
               <Textarea
                 value={documentContent}
