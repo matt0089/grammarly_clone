@@ -28,7 +28,7 @@ export function DocumentManager({ userId, workspaceId, onSelectDocument, selecte
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [newDocTitle, setNewDocTitle] = useState("")
-  const [isCreating, setIsCreating] = useState(isCreating)
+  const [isCreating, setIsCreating] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
 
