@@ -12,6 +12,8 @@ export interface Database {
           created_at: string
           updated_at: string
           file_type: string
+          document_type: string | null
+          document_goal: string | null
         }
         Insert: {
           id?: string
@@ -21,6 +23,8 @@ export interface Database {
           created_at?: string
           updated_at?: string
           file_type?: string
+          document_type?: string | null
+          document_goal?: string | null
         }
         Update: {
           id?: string
@@ -30,6 +34,8 @@ export interface Database {
           created_at?: string
           updated_at?: string
           file_type?: string
+          document_type?: string | null
+          document_goal?: string | null
         }
       }
       profiles: {

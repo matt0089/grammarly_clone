@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { Auth } from "@/components/auth"
 import { DocumentManager } from "@/components/document-manager"
+import { DocumentMetadataModal } from "@/components/document-metadata-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -69,6 +70,10 @@ export default function GrammarlyClone() {
     setReadabilityScore(readability)
   }
 
+  const handleMetadataUpdate = (updatedDocument: Document) => {
+    setSelectedDocument(updatedDocument)
+  }
+
   useEffect(() => {
     if (selectedDocument) {
       setText(selectedDocument.content)
@@ -127,6 +132,9 @@ export default function GrammarlyClone() {
               <div className="flex items-center gap-2 ml-4">
                 <span className="text-sm text-gray-500">•</span>
                 <span className="text-sm font-medium">{selectedDocument.title}</span>
+                {selectedDocument.document_type && (
+                  <span className="text-xs text-gray-400">({selectedDocument.document_type})</span>
+                )}
                 {isSaving && <span className="text-xs text-gray-400">Saving...</span>}
                 {lastSaved && !isSaving && (
                   <span className="text-xs text-gray-400">Saved {lastSaved.toLocaleTimeString()}</span>
@@ -224,10 +232,13 @@ export default function GrammarlyClone() {
                       <span>{stats.words} words</span>
                       <span>{stats.characters} characters</span>
                       {selectedDocument && (
-                        <Button variant="outline" size="sm" onClick={() => saveDocument(text)} disabled={isSaving}>
-                          <Save className="w-4 h-4 mr-2" />
-                          {isSaving ? "Saving..." : "Save"}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <DocumentMetadataModal document={selectedDocument} onMetadataUpdate={handleMetadataUpdate} />
+                          <Button variant="outline" size="sm" onClick={() => saveDocument(text)} disabled={isSaving}>
+                            <Save className="w-4 h-4 mr-2" />
+                            {isSaving ? "Saving..." : "Save"}
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>
