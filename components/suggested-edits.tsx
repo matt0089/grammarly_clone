@@ -5,199 +5,253 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
-import { Loader2, CheckCircle, XCircle, RefreshCw, Lightbulb, Zap } from "lucide-react"
-import { aiService, type SuggestionEdit, type DocumentAnalysis } from "@/lib/ai-service"
-import { cn } from "@/lib/utils"
+import { CheckCircle, XCircle, RefreshCw, Lightbulb, AlertCircle, Info, Zap } from "lucide-react"
+import { aiService, type DocumentSuggestion, type SuggestionResponse } from "@/lib/ai-service"
+import { getSuggestionIcon, getSuggestionColor } from "@/lib/suggestion-types"
 
 interface SuggestedEditsProps {
   content: string
-  onApplySuggestion: (suggestion: SuggestionEdit) => void
-  documentId?: string
+  documentId: string | null
+  onApplySuggestion: (suggestion: DocumentSuggestion) => void
+  isEnabled: boolean
 }
 
-export function SuggestedEdits({ content, onApplySuggestion, documentId }: SuggestedEditsProps) {
+export function SuggestedEdits({ content, documentId, onApplySuggestion, isEnabled }: SuggestedEditsProps) {
+  const [suggestions, setSuggestions] = useState<DocumentSuggestion[]>([])
+  const [summary, setSummary] = useState<SuggestionResponse["summary"] | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysis, setAnalysis] = useState<DocumentAnalysis | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [lastAnalyzedContent, setLastAnalyzedContent] = useState("")
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
 
-  const analyzeContent = useCallback(
-    async (text: string) => {
-      if (text === lastAnalyzedContent || text.trim().length < 10) {
-        return
-      }
+  const analyzeContent = useCallback(async () => {
+    if (!isEnabled || !documentId || content.trim().length < 50) {
+      setSuggestions([])
+      setSummary(null)
+      return
+    }
 
-      setIsAnalyzing(true)
-      setError(null)
+    // Don't re-analyze if content hasn't changed significantly
+    if (content === lastAnalyzedContent) {
+      return
+    }
 
-      try {
-        const result = await aiService.analyzeDocument(text, documentId)
-        setAnalysis(result)
-        setLastAnalyzedContent(text)
-        setAppliedSuggestions(new Set()) // Reset applied suggestions for new analysis
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Analysis failed")
-        setAnalysis(null)
-      } finally {
-        setIsAnalyzing(false)
-      }
-    },
-    [documentId, lastAnalyzedContent],
-  )
+    setIsAnalyzing(true)
+    setError(null)
 
-  // Auto-analyze when content changes (debounced)
+    try {
+      const response = await aiService.analyzeDoucment(content, documentId)
+      setSuggestions(response.suggestions)
+      setSummary(response.summary)
+      setLastAnalyzedContent(content)
+      setAppliedSuggestions(new Set()) // Reset applied suggestions for new analysis
+    } catch (err) {
+      console.error("Analysis error:", err)
+      setError("Failed to analyze document. Please try again.")
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }, [content, documentId, isEnabled, lastAnalyzedContent])
+
+  // Auto-analyze when content changes (with debouncing)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (content !== lastAnalyzedContent) {
-        analyzeContent(content)
-      }
-    }, 2000) // 2 second delay
+      analyzeContent()
+    }, 3000) // Wait 3 seconds after user stops typing
 
     return () => clearTimeout(timeoutId)
-  }, [content, analyzeContent, lastAnalyzedContent])
+  }, [analyzeContent])
 
-  const handleApplySuggestion = (suggestion: SuggestionEdit) => {
+  const handleApplySuggestion = (suggestion: DocumentSuggestion) => {
     onApplySuggestion(suggestion)
     setAppliedSuggestions((prev) => new Set([...prev, suggestion.id]))
   }
 
+  const handleDismissSuggestion = (suggestionId: string) => {
+    setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId))
+  }
+
   const handleRefreshAnalysis = () => {
     setLastAnalyzedContent("") // Force re-analysis
-    analyzeContent(content)
+    analyzeContent()
   }
 
-  const getConfidenceColor = (confidence: SuggestionEdit["confidence"]) => {
-    switch (confidence) {
-      case "high":
-        return "bg-green-100 text-green-800"
-      case "medium":
-        return "bg-yellow-100 text-yellow-800"
-      case "low":
-        return "bg-gray-100 text-gray-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+  if (!isEnabled || !documentId) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Lightbulb className="w-5 h-5" />
+            Suggested Edits
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-gray-500">
+            <Lightbulb className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium">Select a document</p>
+            <p className="text-sm">AI suggestions will appear here</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
-  const availableSuggestions = analysis?.suggestions.filter((s) => !appliedSuggestions.has(s.id)) || []
+  if (content.trim().length < 50) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Lightbulb className="w-5 h-5" />
+            Suggested Edits
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-gray-500">
+            <Info className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium">Write more content</p>
+            <p className="text-sm">Need at least 50 characters for analysis</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-yellow-500" />
-            Suggested Edits
-          </CardTitle>
+        <CardTitle className="text-lg flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {analysis && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Score:</span>
-                <Badge variant="outline" className="text-xs">
-                  {analysis.overallScore}/100
-                </Badge>
-              </div>
-            )}
-            <Button variant="ghost" size="sm" onClick={handleRefreshAnalysis} disabled={isAnalyzing}>
-              <RefreshCw className={cn("w-4 h-4", isAnalyzing && "animate-spin")} />
-            </Button>
+            <Lightbulb className="w-5 h-5" />
+            Suggested Edits
           </div>
-        </div>
-
-        {analysis && (
+          <Button variant="ghost" size="sm" onClick={handleRefreshAnalysis} disabled={isAnalyzing}>
+            <RefreshCw className={`w-4 h-4 ${isAnalyzing ? "animate-spin" : ""}`} />
+          </Button>
+        </CardTitle>
+        {summary && (
           <div className="space-y-2">
-            <Progress value={analysis.overallScore} className="h-2" />
-            <p className="text-xs text-gray-600">{analysis.summary}</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Issues found</span>
+              <span className="font-medium">{summary.totalIssues}</span>
+            </div>
+            {summary.totalIssues > 0 && (
+              <Progress
+                value={((summary.totalIssues - suggestions.length) / summary.totalIssues) * 100}
+                className="h-2"
+              />
+            )}
           </div>
         )}
       </CardHeader>
-
       <CardContent>
         <ScrollArea className="h-[520px]">
           <div className="space-y-3 pr-4">
             {isAnalyzing && (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-                  <p className="text-sm text-gray-600">Analyzing your writing...</p>
-                </div>
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-3 border rounded-lg">
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-full mb-1" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                ))}
               </div>
             )}
 
             {error && (
-              <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                <div className="flex items-center gap-2 mb-1">
-                  <XCircle className="w-4 h-4 text-red-500" />
-                  <span className="text-sm font-medium text-red-900">Analysis Error</span>
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center gap-2 text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Analysis Error</span>
                 </div>
-                <p className="text-xs text-red-700">{error}</p>
+                <p className="text-xs text-red-600 mt-1">{error}</p>
+                <Button variant="outline" size="sm" onClick={handleRefreshAnalysis} className="mt-2">
+                  Try Again
+                </Button>
               </div>
             )}
 
-            {!isAnalyzing && !error && content.trim().length < 10 && (
-              <div className="p-4 text-center text-gray-500">
-                <Zap className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm">Write at least 10 words to get AI-powered suggestions</p>
+            {!isAnalyzing && !error && suggestions.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-400" />
+                <p className="font-medium">Great writing!</p>
+                <p className="text-sm">No suggestions at this time</p>
               </div>
             )}
 
-            {!isAnalyzing && !error && availableSuggestions.length === 0 && content.trim().length >= 10 && (
-              <div className="p-4 text-center text-green-600">
-                <CheckCircle className="w-8 h-8 mx-auto mb-2" />
-                <p className="text-sm font-medium">Great writing!</p>
-                <p className="text-xs text-gray-600">No suggestions at this time.</p>
-              </div>
-            )}
-
-            {availableSuggestions.map((suggestion) => {
-              const typeInfo = aiService.getSuggestionTypeInfo(suggestion.type)
+            {suggestions.map((suggestion) => {
+              const isApplied = appliedSuggestions.has(suggestion.id)
+              const colorClasses = getSuggestionColor(suggestion.severity)
 
               return (
                 <div
                   key={suggestion.id}
-                  className={cn("p-3 rounded-lg border transition-all hover:shadow-sm", typeInfo.bgColor)}
+                  className={`p-3 border rounded-lg transition-all ${
+                    isApplied ? "opacity-50 bg-gray-50" : colorClasses
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
+                      <span className="text-sm">{getSuggestionIcon(suggestion.type)}</span>
+                      <h4 className="font-medium text-sm">{suggestion.title}</h4>
                       <Badge variant="outline" className="text-xs">
-                        {typeInfo.label}
+                        {suggestion.type}
                       </Badge>
-                      <Badge variant="outline" className={cn("text-xs", getConfidenceColor(suggestion.confidence))}>
-                        {suggestion.confidence}
-                      </Badge>
+                    </div>
+                    <Badge variant={suggestion.severity === "high" ? "destructive" : "secondary"} className="text-xs">
+                      {suggestion.severity}
+                    </Badge>
+                  </div>
+
+                  <p className="text-xs mb-3">{suggestion.description}</p>
+
+                  <div className="space-y-2 mb-3">
+                    <div className="p-2 bg-gray-100 rounded text-xs">
+                      <span className="text-gray-600">Original: </span>
+                      <span className="font-mono">{suggestion.originalText}</span>
+                    </div>
+                    <div className="p-2 bg-green-100 rounded text-xs">
+                      <span className="text-gray-600">Suggested: </span>
+                      <span className="font-mono">{suggestion.suggestedText}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-xs text-gray-600 mb-1">Original:</p>
-                      <p className="text-sm bg-white/50 p-2 rounded border">"{suggestion.original}"</p>
-                    </div>
+                  <p className="text-xs text-gray-600 mb-3">{suggestion.explanation}</p>
 
-                    <div>
-                      <p className="text-xs text-gray-600 mb-1">Suggested:</p>
-                      <p className="text-sm bg-white/70 p-2 rounded border font-medium">"{suggestion.suggested}"</p>
-                    </div>
-
-                    <p className={cn("text-xs", typeInfo.textColor)}>{suggestion.explanation}</p>
-
-                    <Button size="sm" onClick={() => handleApplySuggestion(suggestion)} className="w-full mt-2">
-                      Apply Suggestion
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleApplySuggestion(suggestion)}
+                      disabled={isApplied}
+                      className="text-xs"
+                    >
+                      {isApplied ? (
+                        <>
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Applied
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3 h-3 mr-1" />
+                          Apply
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDismissSuggestion(suggestion.id)}
+                      className="text-xs"
+                    >
+                      <XCircle className="w-3 h-3 mr-1" />
+                      Dismiss
                     </Button>
                   </div>
                 </div>
               )
             })}
-
-            {appliedSuggestions.size > 0 && (
-              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm text-green-800">
-                  ✓ Applied {appliedSuggestions.size} suggestion{appliedSuggestions.size !== 1 ? "s" : ""}
-                </p>
-              </div>
-            )}
           </div>
         </ScrollArea>
       </CardContent>

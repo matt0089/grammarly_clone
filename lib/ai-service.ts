@@ -1,26 +1,33 @@
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
 
-export interface SuggestionEdit {
+export interface DocumentSuggestion {
   id: string
-  type: "grammar" | "style" | "clarity" | "conciseness" | "tone"
-  original: string
-  suggested: string
-  explanation: string
+  type: "grammar" | "style" | "clarity" | "tone"
+  severity: "low" | "medium" | "high"
+  title: string
+  description: string
+  originalText: string
+  suggestedText: string
   startIndex: number
   endIndex: number
-  confidence: "high" | "medium" | "low"
+  explanation: string
 }
 
-export interface DocumentAnalysis {
-  suggestions: SuggestionEdit[]
-  overallScore: number
-  summary: string
+export interface SuggestionResponse {
+  suggestions: DocumentSuggestion[]
+  summary: {
+    totalIssues: number
+    grammarIssues: number
+    styleIssues: number
+    clarityIssues: number
+    toneIssues: number
+  }
 }
 
 export class AIService {
   private static instance: AIService
-  private requestQueue: Map<string, Promise<DocumentAnalysis>> = new Map()
+  private requestQueue: Map<string, Promise<SuggestionResponse>> = new Map()
 
   static getInstance(): AIService {
     if (!AIService.instance) {
@@ -29,136 +36,206 @@ export class AIService {
     return AIService.instance
   }
 
-  async analyzeDocument(content: string, documentId?: string): Promise<DocumentAnalysis> {
-    // Use document ID as cache key, fallback to content hash
-    const cacheKey = documentId || this.hashContent(content)
-
-    // Return existing promise if analysis is in progress
-    if (this.requestQueue.has(cacheKey)) {
-      return this.requestQueue.get(cacheKey)!
+  async analyzeDoucment(content: string, documentId: string): Promise<SuggestionResponse> {
+    // Check if there's already a request in progress for this document
+    const existingRequest = this.requestQueue.get(documentId)
+    if (existingRequest) {
+      return existingRequest
     }
 
-    // Create new analysis promise
+    // Minimum content length check
+    if (content.trim().length < 50) {
+      return {
+        suggestions: [],
+        summary: {
+          totalIssues: 0,
+          grammarIssues: 0,
+          styleIssues: 0,
+          clarityIssues: 0,
+          toneIssues: 0,
+        },
+      }
+    }
+
     const analysisPromise = this.performAnalysis(content)
-    this.requestQueue.set(cacheKey, analysisPromise)
+    this.requestQueue.set(documentId, analysisPromise)
 
     try {
       const result = await analysisPromise
       return result
     } finally {
-      // Clean up completed request
-      this.requestQueue.delete(cacheKey)
+      // Clean up the request from queue
+      this.requestQueue.delete(documentId)
     }
   }
 
-  private async performAnalysis(content: string): Promise<DocumentAnalysis> {
-    if (!content.trim() || content.trim().split(/\s+/).length < 10) {
-      return {
-        suggestions: [],
-        overallScore: 100,
-        summary: "Document too short for analysis. Write at least 10 words to get suggestions.",
-      }
-    }
-
+  private async performAnalysis(content: string): Promise<SuggestionResponse> {
     try {
-      const { text } = await generateText({
-        model: openai("gpt-4o-mini"),
-        system: `You are an expert writing assistant. Analyze the provided text and suggest specific improvements for grammar, style, clarity, conciseness, and tone.
+      const prompt = `You are an expert writing assistant. Analyze the following text and provide specific, actionable suggestions for improvement. Focus on:
 
-Return your response as a JSON object with this exact structure:
+1. Grammar errors (subject-verb agreement, punctuation, etc.)
+2. Style improvements (word choice, sentence structure)
+3. Clarity issues (unclear phrasing, ambiguous references)
+4. Tone consistency (formal/informal, active/passive voice)
+
+For each suggestion, provide:
+- The exact text that needs improvement
+- A specific replacement suggestion
+- A brief explanation of why the change improves the writing
+- The character positions where the issue occurs
+
+Text to analyze:
+"""
+${content}
+"""
+
+Respond with a JSON object in this exact format:
 {
   "suggestions": [
     {
       "id": "unique_id",
-      "type": "grammar|style|clarity|conciseness|tone",
-      "original": "exact text to replace",
-      "suggested": "improved version",
-      "explanation": "brief explanation why this is better",
+      "type": "grammar|style|clarity|tone",
+      "severity": "low|medium|high",
+      "title": "Brief title of the issue",
+      "description": "Short description",
+      "originalText": "exact text from document",
+      "suggestedText": "improved version",
       "startIndex": number,
       "endIndex": number,
-      "confidence": "high|medium|low"
+      "explanation": "why this change helps"
     }
-  ],
-  "overallScore": number (0-100),
-  "summary": "brief overall assessment"
+  ]
 }
 
-Guidelines:
-- Only suggest changes that genuinely improve the text
-- Be specific with original text matches
-- Provide clear, actionable explanations
-- Focus on the most impactful improvements
-- Limit to 8 suggestions maximum
-- Calculate accurate start/end indices for text replacement`,
-        prompt: `Please analyze this text and provide improvement suggestions:\n\n${content}`,
+Limit to the 5 most important suggestions. Ensure all character indices are accurate.`
+
+      const { text } = await generateText({
+        model: openai("gpt-4o-mini"),
+        prompt,
         temperature: 0.3,
+        maxTokens: 2000,
       })
 
-      const analysis = JSON.parse(text) as DocumentAnalysis
+      // Parse the AI response
+      const aiResponse = this.parseAIResponse(text, content)
 
-      // Validate and sanitize the response
-      return this.validateAnalysis(analysis, content)
+      // Generate summary
+      const summary = this.generateSummary(aiResponse.suggestions)
+
+      return {
+        suggestions: aiResponse.suggestions,
+        summary,
+      }
     } catch (error) {
-      console.error("AI analysis failed:", error)
+      console.error("AI analysis error:", error)
       return {
         suggestions: [],
-        overallScore: 85,
-        summary: "Analysis temporarily unavailable. Please try again later.",
+        summary: {
+          totalIssues: 0,
+          grammarIssues: 0,
+          styleIssues: 0,
+          clarityIssues: 0,
+          toneIssues: 0,
+        },
       }
     }
   }
 
-  private validateAnalysis(analysis: DocumentAnalysis, content: string): DocumentAnalysis {
-    // Ensure suggestions have valid indices and exist in content
-    const validSuggestions = analysis.suggestions
-      .filter((suggestion) => {
-        const { startIndex, endIndex, original } = suggestion
-        if (startIndex < 0 || endIndex > content.length || startIndex >= endIndex) {
-          return false
+  private parseAIResponse(aiText: string, originalContent: string): { suggestions: DocumentSuggestion[] } {
+    try {
+      // Extract JSON from the AI response
+      const jsonMatch = aiText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error("No JSON found in AI response")
+      }
+
+      const parsed = JSON.parse(jsonMatch[0])
+
+      // Validate and clean up suggestions
+      const validSuggestions: DocumentSuggestion[] = []
+
+      if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+        for (const suggestion of parsed.suggestions) {
+          // Validate required fields
+          if (!suggestion.originalText || !suggestion.suggestedText) {
+            continue
+          }
+
+          // Find the actual position of the text in the document
+          const startIndex = originalContent.indexOf(suggestion.originalText)
+          if (startIndex === -1) {
+            // Try to find a close match
+            const words = suggestion.originalText.split(" ")
+            const firstWord = words[0]
+            const possibleStart = originalContent.indexOf(firstWord)
+            if (possibleStart !== -1) {
+              suggestion.startIndex = possibleStart
+              suggestion.endIndex = possibleStart + suggestion.originalText.length
+            } else {
+              continue // Skip if we can't find the text
+            }
+          } else {
+            suggestion.startIndex = startIndex
+            suggestion.endIndex = startIndex + suggestion.originalText.length
+          }
+
+          // Ensure required fields have defaults
+          validSuggestions.push({
+            id: suggestion.id || `suggestion_${Date.now()}_${Math.random()}`,
+            type: suggestion.type || "style",
+            severity: suggestion.severity || "medium",
+            title: suggestion.title || "Improvement suggestion",
+            description: suggestion.description || "Consider this improvement",
+            originalText: suggestion.originalText,
+            suggestedText: suggestion.suggestedText,
+            startIndex: suggestion.startIndex,
+            endIndex: suggestion.endIndex,
+            explanation: suggestion.explanation || "This change improves readability",
+          })
         }
-        const actualText = content.slice(startIndex, endIndex)
-        return actualText === original
-      })
-      .slice(0, 8) // Limit to 8 suggestions
-      .map((suggestion, index) => ({
-        ...suggestion,
-        id: suggestion.id || `suggestion_${index}`,
-      }))
+      }
 
-    return {
-      suggestions: validSuggestions,
-      overallScore: Math.max(0, Math.min(100, analysis.overallScore || 85)),
-      summary: analysis.summary || "Analysis complete.",
+      return { suggestions: validSuggestions }
+    } catch (error) {
+      console.error("Error parsing AI response:", error)
+      return { suggestions: [] }
     }
   }
 
-  private hashContent(content: string): string {
-    // Simple hash function for caching
-    let hash = 0
-    for (let i = 0; i < content.length; i++) {
-      const char = content.charCodeAt(i)
-      hash = (hash << 5) - hash + char
-      hash = hash & hash // Convert to 32-bit integer
+  private generateSummary(suggestions: DocumentSuggestion[]) {
+    const summary = {
+      totalIssues: suggestions.length,
+      grammarIssues: 0,
+      styleIssues: 0,
+      clarityIssues: 0,
+      toneIssues: 0,
     }
-    return hash.toString()
+
+    suggestions.forEach((suggestion) => {
+      switch (suggestion.type) {
+        case "grammar":
+          summary.grammarIssues++
+          break
+        case "style":
+          summary.styleIssues++
+          break
+        case "clarity":
+          summary.clarityIssues++
+          break
+        case "tone":
+          summary.toneIssues++
+          break
+      }
+    })
+
+    return summary
   }
 
-  // Method to apply a suggestion to content
-  applySuggestion(content: string, suggestion: SuggestionEdit): string {
-    const { startIndex, endIndex, suggested } = suggestion
-    return content.slice(0, startIndex) + suggested + content.slice(endIndex)
-  }
-
-  // Method to get suggestion types with colors
-  getSuggestionTypeInfo(type: SuggestionEdit["type"]) {
-    const typeMap = {
-      grammar: { label: "Grammar", color: "red", bgColor: "bg-red-50", textColor: "text-red-700" },
-      style: { label: "Style", color: "blue", bgColor: "bg-blue-50", textColor: "text-blue-700" },
-      clarity: { label: "Clarity", color: "green", bgColor: "bg-green-50", textColor: "text-green-700" },
-      conciseness: { label: "Conciseness", color: "purple", bgColor: "bg-purple-50", textColor: "text-purple-700" },
-      tone: { label: "Tone", color: "orange", bgColor: "bg-orange-50", textColor: "text-orange-700" },
-    }
-    return typeMap[type] || typeMap.style
+  // Method to apply a suggestion to text
+  applySuggestion(content: string, suggestion: DocumentSuggestion): string {
+    const before = content.substring(0, suggestion.startIndex)
+    const after = content.substring(suggestion.endIndex)
+    return before + suggestion.suggestedText + after
   }
 }
 

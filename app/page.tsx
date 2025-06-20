@@ -13,7 +13,7 @@ import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
 import { ReadabilityDisplay } from "@/components/readability-display"
 import { SuggestedEdits } from "@/components/suggested-edits"
-import type { SuggestionEdit } from "@/lib/ai-service"
+import { aiService, type DocumentSuggestion } from "@/lib/ai-service"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -251,15 +251,16 @@ export default function GrammarlyClone() {
             <div className="w-80 flex-shrink-0">
               <SuggestedEdits
                 content={text}
-                onApplySuggestion={(suggestion: SuggestionEdit) => {
-                  // Apply the suggestion to the text
-                  const newText = suggestion.suggested
-                  const beforeText = text.slice(0, suggestion.startIndex)
-                  const afterText = text.slice(suggestion.endIndex)
-                  const updatedText = beforeText + newText + afterText
-                  handleTextChange(updatedText)
+                documentId={selectedDocument?.id || null}
+                onApplySuggestion={(suggestion: DocumentSuggestion) => {
+                  const newText = aiService.applySuggestion(text, suggestion)
+                  setText(newText)
+                  // Auto-save the changes
+                  if (selectedDocument) {
+                    saveDocument(newText)
+                  }
                 }}
-                documentId={selectedDocument?.id}
+                isEnabled={!!selectedDocument}
               />
             </div>
           </div>
