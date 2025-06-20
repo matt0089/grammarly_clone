@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { deleteWorkspace, updateWorkspace } from '@/lib/workspace-service';
+import { cookies } from 'next/headers';
 
 /**
  * Handles DELETE requests to remove a workspace by its ID.
@@ -94,12 +95,13 @@ export async function PUT(
         .update({ indexing_status: 'PENDING' })
         .eq('id', workspaceId);
 
-      // Asynchronously trigger the indexing job
+      // Asynchronously trigger the indexing job, forwarding cookies
       const url = new URL('/api/index-repository', request.url);
       fetch(url.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cookie': cookies().toString(),
         },
         body: JSON.stringify({ workspaceId }),
       });

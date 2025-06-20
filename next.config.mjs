@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ['tree-sitter', 'tree-sitter-javascript', 'tree-sitter-typescript'],
   eslint: {
     ignoreDuringBuilds: true,
   },
