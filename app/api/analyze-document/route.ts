@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     // Verify user owns the document using service role (bypasses RLS)
     const { data: document, error: docError } = await serviceSupabase
       .from("documents")
-      .select("id, user_id, title")
+      .select("id, user_id, title, document_type, document_goal")
       .eq("id", documentId)
       .single()
 
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     console.log("Authorization successful, performing AI analysis")
 
     // Perform AI analysis
-    const analysisResult = await performAnalysis(content)
+    const analysisResult = await performAnalysis(content, document)
 
     console.log("Analysis completed:", {
       suggestionsCount: analysisResult.suggestions.length,
@@ -181,11 +181,29 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function performAnalysis(content: string): Promise<SuggestionResponse> {
+async function performAnalysis(
+  content: string,
+  document?: { document_type?: string | null; document_goal?: string | null },
+): Promise<SuggestionResponse> {
   try {
     console.log("Starting AI analysis for content length:", content.length)
 
-    const prompt = `You are an expert writing assistant. Analyze the following text and provide specific, actionable suggestions for improvement. Focus on:
+    // Build dynamic context based on document metadata
+    let contextualInfo = ""
+
+    if (document?.document_type) {
+      contextualInfo += `The document you are analyzing is a "${document.document_type}" type document. `
+    }
+
+    if (document?.document_goal) {
+      contextualInfo += `The purpose of this document is: ${document.document_goal}. `
+    }
+
+    if (contextualInfo) {
+      contextualInfo += "Please tailor your suggestions to be appropriate for this document type and purpose. "
+    }
+
+    const prompt = `You are an expert writing assistant. ${contextualInfo}Analyze the following text and provide specific, actionable suggestions for improvement. Focus on:
 
 1. Grammar errors (subject-verb agreement, punctuation, etc.)
 2. Style improvements (word choice, sentence structure)
