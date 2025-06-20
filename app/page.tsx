@@ -21,254 +21,26 @@ import {
   MessageSquare,
   Edit,
   AlignLeft,
+  Loader2,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
 import { ReadabilityDisplay } from "@/components/readability-display"
+import { useAISuggestions } from "@/hooks/use-ai-suggestions"
+import type { EnhancedSuggestion } from "@/lib/ai-types"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
-interface Suggestion {
-  id: string
-  type:
-    | "grammar"
-    | "spelling"
-    | "style"
-    | "clarity"
-    | "conciseness"
-    | "active-voice"
-    | "word-choice"
-    | "sentence-structure"
-  severity: "error" | "warning" | "suggestion"
-  text: string
-  replacement: string
-  explanation: string
-  position: { start: number; end: number }
-}
-
-const GRAMMAR_RULES = [
-  // Original Grammar Rules
-  {
-    pattern: /\bthere\s+is\s+(\w+)\s+(\w+s)\b/gi,
-    replacement: "there are $1 $2",
-    type: "grammar" as const,
-    explanation: 'Use "there are" with plural nouns',
-  },
-  {
-    pattern: /\byour\s+welcome\b/gi,
-    replacement: "you're welcome",
-    type: "grammar" as const,
-    explanation: 'Use "you\'re" (you are) instead of "your"',
-  },
-  {
-    pattern: /\bits\s+a\s+good\s+idea\b/gi,
-    replacement: "it's a good idea",
-    type: "grammar" as const,
-    explanation: 'Use "it\'s" (it is) instead of "its"',
-  },
-
-  // Original Spelling Rules
-  {
-    pattern: /\b(recieve|recieved|recieving)\b/gi,
-    replacement: (match: string) => match.replace("ie", "ei"),
-    type: "spelling" as const,
-    explanation: 'Remember: "i before e except after c"',
-  },
-  {
-    pattern: /\b(seperate|seperated|seperating)\b/gi,
-    replacement: (match: string) =>
-      match.replace("seperate", "separate").replace("seperated", "separated").replace("seperating", "separating"),
-    type: "spelling" as const,
-    explanation: 'Correct spelling is "separate"',
-  },
-
-  // Original Style Rules
-  {
-    pattern: /\bvery\s+(\w+)\b/gi,
-    replacement: "$1",
-    type: "style" as const,
-    explanation: 'Consider removing "very" for more concise writing',
-  },
-
-  // Original Clarity Rules
-  {
-    pattern: /\bin\s+order\s+to\b/gi,
-    replacement: "to",
-    type: "clarity" as const,
-    explanation: 'Simply use "to" instead of "in order to"',
-  },
-
-  // New Conciseness Rules
-  {
-    pattern: /\bat\s+this\s+point\s+in\s+time\b/gi,
-    replacement: "now",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "now"',
-  },
-  {
-    pattern: /\bdue\s+to\s+the\s+fact\s+that\b/gi,
-    replacement: "because",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "because"',
-  },
-  {
-    pattern: /\bin\s+spite\s+of\s+the\s+fact\s+that\b/gi,
-    replacement: "although",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "although"',
-  },
-  {
-    pattern: /\bfor\s+the\s+purpose\s+of\b/gi,
-    replacement: "to",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "to"',
-  },
-  {
-    pattern: /\ba\s+large\s+number\s+of\b/gi,
-    replacement: "many",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "many"',
-  },
-  {
-    pattern: /\bmake\s+a\s+decision\b/gi,
-    replacement: "decide",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "decide"',
-  },
-  {
-    pattern: /\bcome\s+to\s+a\s+conclusion\b/gi,
-    replacement: "conclude",
-    type: "conciseness" as const,
-    explanation: 'Replace wordy phrase with "conclude"',
-  },
-
-  // Active Voice Rules
-  {
-    pattern: /\bit\s+is\s+recommended\s+that\b/gi,
-    replacement: "I recommend that",
-    type: "active-voice" as const,
-    explanation: "Use active voice for stronger recommendations",
-  },
-  {
-    pattern: /\bit\s+can\s+be\s+seen\s+that\b/gi,
-    replacement: "you can see that",
-    type: "active-voice" as const,
-    explanation: "Use active voice for clearer observations",
-  },
-  {
-    pattern: /\bit\s+should\s+be\s+noted\s+that\b/gi,
-    replacement: "note that",
-    type: "active-voice" as const,
-    explanation: "Use active voice for stronger statements",
-  },
-  {
-    pattern: /\bit\s+is\s+believed\s+that\b/gi,
-    replacement: "we believe that",
-    type: "active-voice" as const,
-    explanation: "Use active voice for stronger statements",
-  },
-  {
-    pattern: /\bit\s+has\s+been\s+found\s+that\b/gi,
-    replacement: "research shows that",
-    type: "active-voice" as const,
-    explanation: "Use active voice for clearer findings",
-  },
-  {
-    pattern: /\bmistakes\s+were\s+made\b/gi,
-    replacement: "I made mistakes",
-    type: "active-voice" as const,
-    explanation: "Use active voice to take responsibility",
-  },
-
-  // Word Choice Rules
-  {
-    pattern: /\butilize\b/gi,
-    replacement: "use",
-    type: "word-choice" as const,
-    explanation: 'Use "use" instead of "utilize" for simplicity',
-  },
-  {
-    pattern: /\bcommence\b/gi,
-    replacement: "begin",
-    type: "word-choice" as const,
-    explanation: 'Use "begin" instead of "commence" for clarity',
-  },
-  {
-    pattern: /\bterminate\b/gi,
-    replacement: "end",
-    type: "word-choice" as const,
-    explanation: 'Use "end" instead of "terminate" for simplicity',
-  },
-  {
-    pattern: /\bfacilitate\b/gi,
-    replacement: "help",
-    type: "word-choice" as const,
-    explanation: 'Use "help" instead of "facilitate" for clarity',
-  },
-  {
-    pattern: /\bdemonstrate\b/gi,
-    replacement: "show",
-    type: "word-choice" as const,
-    explanation: 'Use "show" instead of "demonstrate" for simplicity',
-  },
-  {
-    pattern: /\bindicate\b/gi,
-    replacement: "show",
-    type: "word-choice" as const,
-    explanation: 'Use "show" instead of "indicate" for clarity',
-  },
-  {
-    pattern: /\bnumerous\b/gi,
-    replacement: "many",
-    type: "word-choice" as const,
-    explanation: 'Use "many" instead of "numerous" for simplicity',
-  },
-  {
-    pattern: /\bsubsequently\b/gi,
-    replacement: "then",
-    type: "word-choice" as const,
-    explanation: 'Use "then" instead of "subsequently" for clarity',
-  },
-
-  // Sentence Structure Rules
-  {
-    pattern: /\bnot\s+un(\w+)\b/gi,
-    replacement: (match, word) => word,
-    type: "sentence-structure" as const,
-    explanation: "Avoid double negatives for clearer writing",
-  },
-  {
-    pattern: /\bthat\s+that\b/gi,
-    replacement: "that",
-    type: "sentence-structure" as const,
-    explanation: "Remove redundant 'that'",
-  },
-  {
-    pattern: /\bthere\s+is\s+no\s+doubt\s+that\b/gi,
-    replacement: "clearly",
-    type: "sentence-structure" as const,
-    explanation: 'Replace wordy construction with "clearly"',
-  },
-  {
-    pattern: /\bit\s+is\s+important\s+to\s+note\s+that\b/gi,
-    replacement: "importantly",
-    type: "sentence-structure" as const,
-    explanation: 'Replace wordy construction with "importantly"',
-  },
-  {
-    pattern: /\bthere\s+(?:is|are)\s+(?:a|an|the)?\s*(\w+)\s+that\b/gi,
-    replacement: "the $1",
-    type: "sentence-structure" as const,
-    explanation: 'Avoid "there is/are" constructions for stronger writing',
-  },
-]
+// Remove the old Suggestion interface and GRAMMAR_RULES array
+// They are now handled by the AI system
 
 export default function GrammarlyClone() {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
   const [text, setText] = useState("")
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
@@ -276,37 +48,8 @@ export default function GrammarlyClone() {
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
 
-  const checkText = (content: string) => {
-    const newSuggestions: Suggestion[] = []
-
-    GRAMMAR_RULES.forEach((rule, ruleIndex) => {
-      let match
-      const regex = new RegExp(rule.pattern.source, rule.pattern.flags)
-
-      while ((match = regex.exec(content)) !== null) {
-        const replacement =
-          typeof rule.replacement === "function"
-            ? rule.replacement(match[0])
-            : rule.replacement.replace(/\$(\d+)/g, (_, num) => match[Number.parseInt(num)] || "")
-
-        newSuggestions.push({
-          id: `${ruleIndex}-${match.index}`,
-          type: rule.type,
-          severity: rule.type === "spelling" || rule.type === "grammar" ? "error" : "suggestion",
-          text: match[0],
-          replacement,
-          explanation: rule.explanation,
-          position: { start: match.index, end: match.index + match[0].length },
-        })
-      }
-    })
-
-    setSuggestions(newSuggestions)
-
-    // Calculate readability score
-    const readability = calculateFleschReadingEase(content)
-    setReadabilityScore(readability)
-  }
+  // Use the new AI suggestions hook
+  const { suggestions, isProcessingAI, error: suggestionsError, refreshSuggestions } = useAISuggestions(text)
 
   const saveDocument = async (content: string) => {
     if (!selectedDocument || !user) return
@@ -340,9 +83,11 @@ export default function GrammarlyClone() {
     }
   }
 
+  // Calculate readability score when text changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      checkText(text)
+      const readability = calculateFleschReadingEase(text)
+      setReadabilityScore(readability)
     }, 500)
 
     return () => clearTimeout(timer)
@@ -356,7 +101,7 @@ export default function GrammarlyClone() {
     }
   }, [selectedDocument])
 
-  const applySuggestion = (suggestion: Suggestion) => {
+  const applySuggestion = (suggestion: EnhancedSuggestion) => {
     const newText =
       text.slice(0, suggestion.position.start) + suggestion.replacement + text.slice(suggestion.position.end)
     handleTextChange(newText)
@@ -364,7 +109,8 @@ export default function GrammarlyClone() {
   }
 
   const ignoreSuggestion = (suggestionId: string) => {
-    setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId))
+    // For now, we'll just hide it from the UI
+    // In a full implementation, we'd track ignored suggestions
     setSelectedSuggestion(null)
   }
 
@@ -382,13 +128,17 @@ export default function GrammarlyClone() {
       .filter((word) => word.length > 0).length,
     characters: text.length,
     errors: suggestions.filter((s) => s.severity === "error").length,
-    suggestions: suggestions.filter((s) => s.severity === "suggestion").length,
+    suggestions: suggestions.length,
   }
 
-  const getSuggestionIcon = (type: string, severity: string) => {
-    if (severity === "error") return <AlertCircle className="w-4 h-4 text-red-500" />
+  const getSuggestionIcon = (suggestion: EnhancedSuggestion) => {
+    if (suggestion.aiGenerated) {
+      return <Sparkles className="w-4 h-4 text-purple-500" />
+    }
 
-    switch (type) {
+    if (suggestion.severity === "error") return <AlertCircle className="w-4 h-4 text-red-500" />
+
+    switch (suggestion.type) {
       case "style":
         return <Lightbulb className="w-4 h-4 text-blue-500" />
       case "clarity":
@@ -497,14 +247,20 @@ export default function GrammarlyClone() {
             {/* Stats Card */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Writing Stats</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  Writing Stats
+                  {isProcessingAI && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Issues Found</span>
-                  <Badge variant={stats.errors > 0 ? "destructive" : "secondary"}>
-                    {stats.errors + stats.suggestions}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={stats.errors > 0 ? "destructive" : "secondary"}>
+                      {stats.errors + stats.suggestions}
+                    </Badge>
+                    {isProcessingAI && <span className="text-xs text-blue-600">Analyzing...</span>}
+                  </div>
                 </div>
                 <ReadabilityDisplay result={readabilityScore} wordCount={stats.words} />
                 <div className="flex justify-between items-center">
@@ -515,15 +271,26 @@ export default function GrammarlyClone() {
                   <span className="text-sm text-gray-600">Characters</span>
                   <span className="font-medium">{stats.characters}</span>
                 </div>
+                {suggestionsError && (
+                  <div className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    AI suggestions unavailable
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             {/* Suggestions Card */}
             <Card className="flex-1">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5" />
-                  Suggestions ({suggestions.length})
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    Suggestions ({suggestions.length})
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={refreshSuggestions} disabled={isProcessingAI}>
+                    <RefreshCw className={`w-4 h-4 ${isProcessingAI ? "animate-spin" : ""}`} />
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -547,7 +314,7 @@ export default function GrammarlyClone() {
                           onClick={() => setSelectedSuggestion(suggestion.id)}
                         >
                           <div className="flex items-start gap-3">
-                            {getSuggestionIcon(suggestion.type, suggestion.severity)}
+                            {getSuggestionIcon(suggestion)}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge variant={suggestion.type as any} className="text-xs">
@@ -559,11 +326,22 @@ export default function GrammarlyClone() {
                                 >
                                   {suggestion.severity}
                                 </Badge>
+                                {suggestion.aiGenerated && (
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                                    AI
+                                  </Badge>
+                                )}
+                                <span className="text-xs text-gray-500">
+                                  {Math.round(suggestion.confidence * 100)}%
+                                </span>
                               </div>
                               <p className="text-sm font-medium text-gray-900 mb-1">
                                 "{suggestion.text}" → "{suggestion.replacement}"
                               </p>
-                              <p className="text-xs text-gray-600 mb-3">{suggestion.explanation}</p>
+                              <p className="text-xs text-gray-600 mb-2">{suggestion.explanation}</p>
+                              {suggestion.contextualReason && (
+                                <p className="text-xs text-blue-600 mb-2 italic">{suggestion.contextualReason}</p>
+                              )}
                               <div className="flex gap-2">
                                 <Button
                                   size="sm"
