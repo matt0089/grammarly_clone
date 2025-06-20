@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { deleteWorkspace } from '@/lib/workspace-service';
+import { deleteWorkspace, updateWorkspace } from '@/lib/workspace-service';
 
 /**
  * Handles DELETE requests to remove a workspace by its ID.
@@ -39,5 +39,54 @@ export async function DELETE(
     console.error(`Error in DELETE /api/workspaces/${workspaceId}:`, error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     return NextResponse.json({ error: 'Failed to delete workspace', details: errorMessage }, { status: 500 });
+  }
+}
+
+/**
+ * Handles PUT requests to update a workspace.
+ * @param request - The incoming HTTP request.
+ * @param params - The route parameters.
+ * @returns A promise that resolves to the response.
+ */
+export async function PUT(
+  request: Request,
+  { params }: { params: { workspaceId: string } }
+) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { workspaceId } = params;
+  const { name, github_repo_url, git_commit_sha } = await request.json();
+
+  if (!workspaceId) {
+    return NextResponse.json(
+      { error: 'Workspace ID is required' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const updatedWorkspace = await updateWorkspace(supabase, {
+      workspaceId,
+      userId: user.id,
+      name,
+      github_repo_url,
+      git_commit_sha,
+    });
+    return NextResponse.json(updatedWorkspace, { status: 200 });
+  } catch (error) {
+    console.error(`Error in PUT /api/workspaces/${workspaceId}:`, error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'An unknown error occurred';
+    return NextResponse.json(
+      { error: 'Failed to update workspace', details: errorMessage },
+      { status: 500 }
+    );
   }
 } 

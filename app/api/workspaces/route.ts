@@ -51,12 +51,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { name } = await request.json();
+    const { name, github_repo_url, git_commit_sha } = await request.json();
     if (!name) {
       return NextResponse.json({ error: 'Workspace name is required' }, { status: 400 });
     }
 
-    const newWorkspace = await createWorkspace(supabase, { name, userId: user.id });
+    const newWorkspace = await createWorkspace(supabase, {
+      name,
+      userId: user.id,
+      github_repo_url,
+      git_commit_sha,
+    });
     return NextResponse.json(newWorkspace, { status: 201 });
   } catch (error) {
     console.error('Error in POST /api/workspaces:', error);

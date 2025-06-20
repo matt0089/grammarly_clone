@@ -30,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import EditWorkspaceModal from './edit-workspace-modal';
 
 /**
  * Props for the WorkspaceList component.
@@ -47,6 +48,7 @@ interface WorkspaceListProps {
  */
 export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps) {
   const router = useRouter();
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
 
   /**
    * Handles the deletion of a workspace.
@@ -70,7 +72,16 @@ export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps)
     }
   }
 
-  if (initialWorkspaces.length === 0) {
+  function handleUpdate(updatedWorkspace: Workspace) {
+    setWorkspaces((prevWorkspaces) =>
+      prevWorkspaces.map((ws) =>
+        ws.id === updatedWorkspace.id ? updatedWorkspace : ws
+      )
+    );
+    router.refresh();
+  }
+
+  if (workspaces.length === 0) {
     return (
       <div className="text-center py-8">
         <p className="text-muted-foreground">You don't have any workspaces yet.</p>
@@ -81,16 +92,30 @@ export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps)
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {initialWorkspaces.map((workspace) => (
+      {workspaces.map((workspace) => (
         <Card key={workspace.id}>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg">{workspace.name}</CardTitle>
-            <WorkspaceActions workspaceId={workspace.id} onDelete={handleDelete} />
+            <WorkspaceActions
+              workspace={workspace}
+              onDelete={handleDelete}
+              onUpdate={handleUpdate}
+            />
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
               Last updated: {workspace.updated_at ? new Date(workspace.updated_at).toLocaleDateString() : 'N/A'}
             </p>
+            {workspace.github_repo_url && (
+              <p className="text-sm text-muted-foreground truncate">
+                Repo: {workspace.github_repo_url}
+              </p>
+            )}
+            {workspace.git_commit_sha && (
+              <p className="text-sm text-muted-foreground truncate">
+                Commit: {workspace.git_commit_sha}
+              </p>
+            )}
           </CardContent>
           <CardFooter>
             <Link href={`/workspace/${workspace.id}`} passHref>
@@ -108,7 +133,15 @@ export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps)
  * @param {{ workspaceId: string; onDelete: (id: string) => void }} props - Component props.
  * @returns {React.ReactNode} The rendered actions menu.
  */
-function WorkspaceActions({ workspaceId, onDelete }: { workspaceId: string; onDelete: (id: string) => void }) {
+function WorkspaceActions({
+  workspace,
+  onDelete,
+  onUpdate,
+}: {
+  workspace: Workspace;
+  onDelete: (id: string) => void;
+  onUpdate: (workspace: Workspace) => void;
+}) {
   return (
     <AlertDialog>
       <DropdownMenu>
@@ -119,6 +152,11 @@ function WorkspaceActions({ workspaceId, onDelete }: { workspaceId: string; onDe
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <EditWorkspaceModal workspace={workspace} onUpdate={onUpdate}>
+            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+              Edit
+            </DropdownMenuItem>
+          </EditWorkspaceModal>
           <AlertDialogTrigger asChild>
             <DropdownMenuItem className="text-red-600">
               Delete
@@ -136,7 +174,7 @@ function WorkspaceActions({ workspaceId, onDelete }: { workspaceId: string; onDe
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={() => onDelete(workspaceId)}>
+          <AlertDialogAction onClick={() => onDelete(workspace.id)}>
             Continue
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -48,17 +48,61 @@ export async function getWorkspaces(
  */
 export async function createWorkspace(
   client: SupabaseClient<Database>,
-  params: { name: string; userId: string }
+  params: {
+    name: string;
+    userId: string;
+    github_repo_url?: string;
+    git_commit_sha?: string;
+  }
 ): Promise<Workspace> {
   const { data, error } = await client
     .from('workspaces')
-    .insert({ name: params.name, user_id: params.userId })
+    .insert({
+      name: params.name,
+      user_id: params.userId,
+      github_repo_url: params.github_repo_url,
+      git_commit_sha: params.git_commit_sha,
+    })
     .select()
     .single();
 
   if (error) {
     console.error('Error creating workspace:', error);
     throw new Error('Could not create workspace.');
+  }
+
+  return data;
+}
+
+/**
+ * Updates an existing workspace.
+ *
+ * @param client - The Supabase client instance.
+ * @param params - The parameters for updating a workspace.
+ * @returns A promise that resolves to the updated workspace.
+ */
+export async function updateWorkspace(
+  client: SupabaseClient<Database>,
+  params: {
+    workspaceId: string;
+    userId: string;
+    name?: string;
+    github_repo_url?: string;
+    git_commit_sha?: string;
+  }
+): Promise<Workspace> {
+  const { workspaceId, userId, ...updateData } = params;
+  const { data, error } = await client
+    .from('workspaces')
+    .update(updateData)
+    .eq('id', workspaceId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating workspace:', error);
+    throw new Error('Could not update workspace.');
   }
 
   return data;

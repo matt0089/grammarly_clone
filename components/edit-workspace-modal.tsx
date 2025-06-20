@@ -1,12 +1,11 @@
 /**
- * @file This file contains the CreateWorkspaceModal component, which provides a
- * dialog form for users to create a new workspace. It handles the form state,
- * submission, and API interaction.
+ * @file This file contains the EditWorkspaceModal component, which provides a
+ * dialog form for users to update an existing workspace.
  */
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, PropsWithChildren } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,25 +18,29 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useRouter } from 'next/navigation';
+import { Workspace } from '@/lib/workspace-service';
 
-/**
- * A modal component for creating a new workspace.
- *
- * @returns {React.ReactNode} The rendered modal component.
- */
-export default function CreateWorkspaceModal() {
+interface EditWorkspaceModalProps {
+  workspace: Workspace;
+  onUpdate: (workspace: Workspace) => void;
+}
+
+export default function EditWorkspaceModal({
+  workspace,
+  onUpdate,
+  children,
+}: PropsWithChildren<EditWorkspaceModalProps>) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [githubRepoUrl, setGithubRepoUrl] = useState('');
-  const [gitCommitSha, setGitCommitSha] = useState('');
+  const [name, setName] = useState(workspace.name);
+  const [githubRepoUrl, setGithubRepoUrl] = useState(
+    workspace.github_repo_url || ''
+  );
+  const [gitCommitSha, setGitCommitSha] = useState(
+    workspace.git_commit_sha || ''
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
-  /**
-   * Handles the form submission to create a new workspace.
-   */
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) {
@@ -48,8 +51,8 @@ export default function CreateWorkspaceModal() {
     setError(null);
 
     try {
-      const response = await fetch('/api/workspaces', {
-        method: 'POST',
+      const response = await fetch(`/api/workspaces/${workspace.id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -62,15 +65,16 @@ export default function CreateWorkspaceModal() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create workspace');
+        throw new Error(errorData.error || 'Failed to update workspace');
       }
 
-      // Close the modal and refresh the page to show the new workspace
+      const updatedWorkspace = await response.json();
+      onUpdate(updatedWorkspace);
       setOpen(false);
-      router.refresh();
-
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      setError(
+        err instanceof Error ? err.message : 'An unknown error occurred.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -78,15 +82,13 @@ export default function CreateWorkspaceModal() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Create Workspace</Button>
-      </DialogTrigger>
+      <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Workspace</DialogTitle>
+            <DialogTitle>Edit Workspace</DialogTitle>
             <DialogDescription>
-              Give your new workspace a name. Click save when you're done.
+              Update your workspace details. Click save when you're done.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -131,7 +133,7 @@ export default function CreateWorkspaceModal() {
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Creating...' : 'Create'}
+              {isLoading ? 'Saving...' : 'Save changes'}
             </Button>
           </DialogFooter>
         </form>
