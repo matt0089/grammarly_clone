@@ -9,11 +9,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Text is required and must be a string" }, { status: 400 })
     }
 
-    if (text.length > 10000) {
-      return NextResponse.json({ error: "Text is too long. Maximum 10,000 characters allowed." }, { status: 400 })
+    // Reduced from 10000 to prevent memory issues
+    if (text.length > 3000) {
+      return NextResponse.json({ error: "Text is too long. Maximum 3,000 characters allowed." }, { status: 400 })
     }
 
-    const suggestions = await aiSuggestionService.generateSuggestions(text, context)
+    // Add timeout to prevent hanging requests
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("Request timeout")), 30000) // 30 second timeout
+    })
+
+    const suggestionsPromise = aiSuggestionService.generateSuggestions(text, context)
+
+    const suggestions = await Promise.race([suggestionsPromise, timeoutPromise])
 
     return NextResponse.json({
       suggestions,
@@ -23,25 +31,15 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Suggestions API error:", error)
 
-    // More detailed error logging
-    if (error instanceof Error) {
-      console.error("Error name:", error.name)
-      console.error("Error message:", error.message)
-
-      // Log raw AI response if available
-      if ("text" in error) {
-        console.error("Raw AI response that failed parsing:", (error as any).text)
-      }
+    // Force garbage collection if available (Node.js)
+    if (global.gc) {
+      global.gc()
     }
 
     return NextResponse.json(
       {
         error: "Failed to generate suggestions",
         details: error instanceof Error ? error.message : "Unknown error",
-        // In development, include more details
-        ...(process.env.NODE_ENV === "development" && {
-          stack: error instanceof Error ? error.stack : undefined,
-        }),
       },
       { status: 500 },
     )

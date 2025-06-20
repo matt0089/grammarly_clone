@@ -49,18 +49,15 @@ export class HybridProcessor {
   /**
    * Get suggestions using hybrid approach: fast regex + AI enhancement
    */
-  async getSuggestions(
-    text: string,
-    forceRefresh = false,
-  ): Promise<{
+  async getSuggestions(text: string): Promise<{
     suggestions: EnhancedSuggestion[]
     isProcessingAI: boolean
   }> {
     // Always get quick regex suggestions first
     const quickSuggestions = this.getQuickSuggestions(text)
 
-    // Check if we should process with AI (force refresh bypasses change detection)
-    const shouldProcessAI = forceRefresh || textProcessor.hasSignificantChanges(text, this.lastProcessedText)
+    // Check if we should process with AI
+    const shouldProcessAI = textProcessor.hasSignificantChanges(text, this.lastProcessedText)
 
     if (!shouldProcessAI && !this.isProcessingAI) {
       return { suggestions: quickSuggestions, isProcessingAI: false }
@@ -68,7 +65,7 @@ export class HybridProcessor {
 
     // Start AI processing if not already running
     if (shouldProcessAI && !this.isProcessingAI) {
-      this.processWithAI(text, quickSuggestions, forceRefresh)
+      this.processWithAI(text, quickSuggestions)
     }
 
     return {
@@ -114,20 +111,11 @@ export class HybridProcessor {
   /**
    * Process text with AI asynchronously
    */
-  private async processWithAI(
-    text: string,
-    quickSuggestions: EnhancedSuggestion[],
-    forceRefresh = false,
-  ): Promise<void> {
+  private async processWithAI(text: string, quickSuggestions: EnhancedSuggestion[]): Promise<void> {
     this.isProcessingAI = true
     this.lastProcessedText = text
 
     try {
-      // Clear cache if this is a forced refresh
-      if (forceRefresh) {
-        // We could clear cache here if needed
-      }
-
       // Use the client AI service instead of the server-side service
       const aiSuggestions = await clientAIService.generateSuggestions(text)
       const mergedSuggestions = this.mergeSuggestions(quickSuggestions, aiSuggestions)

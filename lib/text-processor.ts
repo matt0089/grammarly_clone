@@ -1,13 +1,19 @@
 import type { TextChunk } from "./ai-types"
 
 export class TextProcessor {
-  private readonly MAX_CHUNK_SIZE = 1000 // Characters
-  private readonly CONTEXT_OVERLAP = 100 // Characters for context
+  private readonly MAX_CHUNK_SIZE = 500 // Reduced from 1000
+  private readonly CONTEXT_OVERLAP = 50 // Reduced from 100
 
   /**
    * Split text into logical chunks with context overlap
    */
   chunkText(text: string): TextChunk[] {
+    // Limit total text size to prevent memory issues
+    const MAX_TEXT_LENGTH = 5000
+    if (text.length > MAX_TEXT_LENGTH) {
+      text = text.slice(0, MAX_TEXT_LENGTH)
+    }
+
     if (text.length <= this.MAX_CHUNK_SIZE) {
       return [{ text, startIndex: 0, endIndex: text.length }]
     }

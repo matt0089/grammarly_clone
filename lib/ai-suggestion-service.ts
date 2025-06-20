@@ -6,7 +6,9 @@ import { textProcessor } from "./text-processor"
 import { suggestionCache } from "./suggestion-cache"
 
 export class AISuggestionService {
-  private readonly model = openai("gpt-4o-mini") // This will only work on server side
+  private readonly model = openai("gpt-4o-mini")
+  private processingCount = 0
+  private readonly MAX_CONCURRENT_REQUESTS = 3
 
   /**
    * Generate AI-powered suggestions for text (SERVER SIDE ONLY)
@@ -17,23 +19,39 @@ export class AISuggestionService {
       throw new Error("AISuggestionService can only be used on the server side")
     }
 
-    if (!text.trim()) return []
-
-    // Check cache first
-    const textHash = textProcessor.generateTextHash(text)
-    const cached = suggestionCache.getCachedSuggestions(textHash)
-    if (cached) {
-      return cached
+    // Limit concurrent processing to prevent memory overload
+    if (this.processingCount >= this.MAX_CONCURRENT_REQUESTS) {
+      throw new Error("Too many concurrent requests. Please try again later.")
     }
 
+    this.processingCount++
+
     try {
+      if (!text.trim()) return []
+
+      // Stricter text length limit
+      if (text.length > 3000) {
+        text = text.slice(0, 3000)
+      }
+
+      // Check cache first
+      const textHash = textProcessor.generateTextHash(text)
+      const cached = suggestionCache.getCachedSuggestions(textHash)
+      if (cached) {
+        return cached
+      }
+
       // Process text in chunks if it's too long
       const chunks = textProcessor.chunkText(text)
       const allSuggestions: EnhancedSuggestion[] = []
 
+      // Process chunks sequentially to reduce memory pressure
       for (const chunk of chunks) {
         const chunkSuggestions = await this.processChunk(chunk, context)
         allSuggestions.push(...chunkSuggestions)
+
+        // Small delay to allow garbage collection
+        await new Promise((resolve) => setTimeout(resolve, 10))
       }
 
       // Deduplicate and sort suggestions
@@ -47,10 +65,11 @@ export class AISuggestionService {
     } catch (error) {
       console.error("AI suggestion generation failed:", error)
       throw error
+    } finally {
+      this.processingCount--
     }
   }
 
-  // ... rest of the methods remain the same
   private async processChunk(chunk: TextChunk, globalContext?: string): Promise<EnhancedSuggestion[]> {
     const prompt = this.buildPrompt(chunk.text, chunk.context || globalContext)
 
@@ -59,19 +78,13 @@ export class AISuggestionService {
         model: this.model,
         schema: SuggestionSchema,
         prompt,
-        temperature: 0.1, // Lower temperature for more consistent JSON
-        maxRetries: 2, // Add retries for failed attempts
+        temperature: 0.1, // Lower temperature for more consistent results
+        maxRetries: 1, // Reduced retries to prevent hanging
       })
 
       return this.transformToSuggestions(result.object.suggestions, chunk)
     } catch (error) {
       console.error("Failed to process chunk:", error)
-
-      // Log the raw response for debugging
-      if (error instanceof Error && "text" in error) {
-        console.error("Raw AI response:", (error as any).text)
-      }
-
       return []
     }
   }
@@ -79,38 +92,28 @@ export class AISuggestionService {
   private buildPrompt(text: string, context?: string): string {
     return `You are an expert writing assistant. Analyze the following text for writing improvements and provide specific, actionable suggestions.
 
-IMPORTANT: You must respond with valid JSON that exactly matches this structure:
+Consider these aspects:
+- Grammar and spelling errors (mark as "error" severity)
+- Style and clarity issues (mark as "warning" or "suggestion" severity)
+- Conciseness opportunities
+- Active voice recommendations
+- Word choice improvements
+- Sentence structure optimization
 
-{
-  "suggestions": [
-    {
-      "type": "grammar" | "spelling" | "style" | "clarity" | "conciseness" | "active-voice" | "word-choice" | "sentence-structure",
-      "severity": "error" | "warning" | "suggestion",
-      "originalText": "exact text from input",
-      "suggestedText": "your suggested replacement",
-      "explanation": "clear explanation of why this change improves the text",
-      "startIndex": 0,
-      "endIndex": 10,
-      "confidence": 0.9,
-      "contextualReason": "optional additional context",
-      "alternativeOptions": ["optional", "alternative", "suggestions"]
-    }
-  ]
-}
+Guidelines:
+- Focus on the most impactful improvements first
+- Provide exact text positions (character indices)
+- Give clear explanations for each suggestion
+- Suggest specific replacements
+- Rate your confidence (0.0 to 1.0)
+- Provide contextual reasoning when helpful
 
-Rules:
-- Use exact character positions (startIndex/endIndex) within the analyzed text
-- Confidence must be a number between 0.0 and 1.0
-- All string fields must use proper JSON syntax with colons (:) not equals (=)
-- Focus on the most impactful improvements
-- Provide clear, actionable explanations
-
-${context ? `Document Context: ${context}` : ""}
+${context ? `Context: ${context}` : ""}
 
 Text to analyze:
 "${text}"
 
-Respond with valid JSON only:`
+Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing.`
   }
 
   private transformToSuggestions(
