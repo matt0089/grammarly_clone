@@ -6,13 +6,14 @@ import { Auth } from "@/components/auth"
 import { DocumentManager } from "@/components/document-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { FileText, Settings, LogOut, Save, Clock, BarChart3, PanelLeft } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
 import { ReadabilityDisplay } from "@/components/readability-display"
+import { SuggestedEdits } from "@/components/suggested-edits"
+import type { EditingSuggestion } from "@/lib/ai-editing-service"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -66,6 +67,21 @@ export default function GrammarlyClone() {
     // Calculate readability score
     const readability = calculateFleschReadingEase(newText)
     setReadabilityScore(readability)
+  }
+
+  const handleApplySuggestion = (suggestion: EditingSuggestion) => {
+    const newText =
+      text.substring(0, suggestion.startIndex) + suggestion.suggested + text.substring(suggestion.endIndex)
+
+    handleTextChange(newText)
+
+    // Focus back to editor
+    if (editorRef.current) {
+      editorRef.current.focus()
+      // Set cursor position after the applied suggestion
+      const newCursorPosition = suggestion.startIndex + suggestion.suggested.length
+      editorRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+    }
   }
 
   useEffect(() => {
@@ -246,55 +262,9 @@ export default function GrammarlyClone() {
               </Card>
             </div>
 
-            {/* Writing Tips Card - Always on the right */}
+            {/* AI Suggested Edits Card - Always on the right */}
             <div className="w-80 flex-shrink-0">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Writing Tips</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[520px]">
-                    <div className="space-y-3 pr-4">
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <h4 className="font-medium text-sm text-blue-900 mb-1">Keep it Simple</h4>
-                        <p className="text-xs text-blue-700">
-                          Use clear, concise language that your readers can easily understand.
-                        </p>
-                      </div>
-                      <div className="p-3 bg-green-50 rounded-lg">
-                        <h4 className="font-medium text-sm text-green-900 mb-1">Active Voice</h4>
-                        <p className="text-xs text-green-700">
-                          Use active voice to make your writing more direct and engaging.
-                        </p>
-                      </div>
-                      <div className="p-3 bg-purple-50 rounded-lg">
-                        <h4 className="font-medium text-sm text-purple-900 mb-1">Vary Sentence Length</h4>
-                        <p className="text-xs text-purple-700">
-                          Mix short and long sentences to create rhythm in your writing.
-                        </p>
-                      </div>
-                      <div className="p-3 bg-orange-50 rounded-lg">
-                        <h4 className="font-medium text-sm text-orange-900 mb-1">Show, Don't Tell</h4>
-                        <p className="text-xs text-orange-700">
-                          Use specific examples and details to illustrate your points.
-                        </p>
-                      </div>
-                      <div className="p-3 bg-red-50 rounded-lg">
-                        <h4 className="font-medium text-sm text-red-900 mb-1">Edit Ruthlessly</h4>
-                        <p className="text-xs text-red-700">
-                          Remove unnecessary words and phrases to make your writing more impactful.
-                        </p>
-                      </div>
-                      <div className="p-3 bg-yellow-50 rounded-lg">
-                        <h4 className="font-medium text-sm text-yellow-900 mb-1">Read Aloud</h4>
-                        <p className="text-xs text-yellow-700">
-                          Reading your work aloud helps identify awkward phrasing and flow issues.
-                        </p>
-                      </div>
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+              <SuggestedEdits text={text} onApplySuggestion={handleApplySuggestion} isEnabled={!!selectedDocument} />
             </div>
           </div>
         </div>
