@@ -33,8 +33,13 @@ export default function WorkspacePage() {
   const [readabilityScore, setReadabilityScore] = useState<ReadabilityResult | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
+  const [loading, setLoading] = useState(true)
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed)
+  }
 
   useEffect(() => {
     checkUserAndWorkspace()
@@ -54,30 +59,26 @@ export default function WorkspacePage() {
       setUser(session.user)
 
       // Fetch workspace details
-      const response = await fetch(`/api/workspaces/${workspaceId}`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      })
+      const { data: workspaceData, error: workspaceError } = await supabase
+        .from("workspaces")
+        .select("*")
+        .eq("id", workspaceId)
+        .eq("user_id", session.user.id)
+        .single()
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          router.push("/dashboard")
-          return
-        }
-        throw new Error("Failed to fetch workspace")
+      if (workspaceError || !workspaceData) {
+        console.error("Workspace not found or access denied")
+        router.push("/dashboard")
+        return
       }
 
-      const data = await response.json()
-      setWorkspace(data.workspace)
+      setWorkspace(workspaceData)
     } catch (error) {
-      console.error("Error checking user/workspace:", error)
-      router.push("/dashboard")
+      console.error("Error checking user and workspace:", error)
+      router.push("/")
+    } finally {
+      setLoading(false)
     }
-  }
-
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(!isSidebarCollapsed)
   }
 
   const saveDocument = async (content: string) => {
@@ -130,12 +131,7 @@ export default function WorkspacePage() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    setUser(null)
     router.push("/")
-  }
-
-  const goToDashboard = () => {
-    router.push("/dashboard")
   }
 
   const stats = {
@@ -154,17 +150,21 @@ export default function WorkspacePage() {
     ), // Assuming 200 words per minute
   }
 
-  if (!user || !workspace) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center mx-auto mb-4">
-            <FileText className="w-5 h-5 text-white" />
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </div>
           <p className="text-gray-600">Loading workspace...</p>
         </div>
       </div>
     )
+  }
+
+  if (!user || !workspace) {
+    return null
   }
 
   return (
@@ -173,7 +173,7 @@ export default function WorkspacePage() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={goToDashboard}>
+            <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Dashboard
             </Button>
@@ -181,8 +181,8 @@ export default function WorkspacePage() {
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">DocWise AI</h1>
-              <p className="text-sm text-gray-600">{workspace.name}</p>
+              <h1 className="text-xl font-semibold text-gray-900">{workspace.name}</h1>
+              {workspace.description && <p className="text-sm text-gray-600">{workspace.description}</p>}
             </div>
             <Button
               variant="ghost"
@@ -257,7 +257,7 @@ export default function WorkspacePage() {
               </DialogContent>
             </Dialog>
 
-            <Button variant="ghost" size="sm" onClick={goToDashboard}>
+            <Button variant="ghost" size="sm">
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Button>

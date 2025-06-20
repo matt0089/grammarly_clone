@@ -3,7 +3,7 @@
 import React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, RefreshCw } from "lucide-react"
 
 interface ErrorBoundaryState {
   hasError: boolean
@@ -12,7 +12,6 @@ interface ErrorBoundaryState {
 
 interface ErrorBoundaryProps {
   children: React.ReactNode
-  fallback?: React.ReactNode
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -26,15 +25,11 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Error caught by boundary:", error, errorInfo)
+    console.error("Error caught by boundary:", error.message, { componentStack: errorInfo.componentStack })
   }
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback
-      }
-
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md">
@@ -45,8 +40,22 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <CardTitle className="text-xl text-red-900">Something went wrong</CardTitle>
             </CardHeader>
             <CardContent className="text-center space-y-4">
-              <p className="text-gray-600">We encountered an unexpected error. Please try refreshing the page.</p>
-              <Button onClick={() => window.location.reload()} className="w-full">
+              <p className="text-gray-600">
+                We encountered an unexpected error. Please try refreshing the page or contact support if the problem
+                persists.
+              </p>
+              {this.state.error && (
+                <details className="text-left">
+                  <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                    Technical details
+                  </summary>
+                  <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto max-h-32">
+                    {this.state.error.message}
+                  </pre>
+                </details>
+              )}
+              <Button onClick={() => window.location.reload()} className="w-full" variant="outline">
+                <RefreshCw className="w-4 h-4 mr-2" />
                 Refresh Page
               </Button>
             </CardContent>
