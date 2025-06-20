@@ -14,8 +14,10 @@ import type { Database } from "@/lib/database.types"
 import { fileProcessorRegistry } from "@/lib/file-processors"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { downloadDocument, downloadDocumentsAsZip, type DownloadableDocument } from "@/lib/download-utils"
+import { WorkspaceService } from "@/lib/workspace-service"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
+type Workspace = Database["public"]["Tables"]["workspaces"]["Row"]
 
 interface DocumentManagerProps {
   userId: string
@@ -30,30 +32,47 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
   const [isCreating, setIsCreating] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
 
   useEffect(() => {
-    fetchDocuments()
+    initializeWorkspaceAndDocuments()
   }, [userId])
 
-  const fetchDocuments = async () => {
+  const initializeWorkspaceAndDocuments = async () => {
+    try {
+      // Ensure user has a default workspace
+      const workspace = await WorkspaceService.ensureDefaultWorkspace(userId)
+      if (workspace) {
+        setCurrentWorkspace(workspace)
+        await fetchDocuments(workspace.id)
+      } else {
+        console.error("Failed to create or get default workspace")
+      }
+    } catch (error) {
+      console.error("Error initializing workspace:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchDocuments = async (workspaceId: string) => {
     try {
       const { data, error } = await supabase
         .from("documents")
         .select("*")
         .eq("user_id", userId)
+        .eq("workspace_id", workspaceId)
         .order("updated_at", { ascending: false })
 
       if (error) throw error
       setDocuments(data || [])
     } catch (error) {
       console.error("Error fetching documents:", error)
-    } finally {
-      setLoading(false)
     }
   }
 
   const createDocument = async () => {
-    if (!newDocTitle.trim()) return
+    if (!newDocTitle.trim() || !currentWorkspace) return
 
     setIsCreating(true)
     try {
@@ -63,6 +82,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
           title: newDocTitle,
           content: "",
           user_id: userId,
+          workspace_id: currentWorkspace.id,
           file_type: "txt", // Default to txt for new documents
         })
         .select()
@@ -97,7 +117,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
 
   const uploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || !currentWorkspace) return
 
     setUploadError(null)
     setIsUploading(true)
@@ -126,6 +146,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
           title: file.name,
           content: content,
           user_id: userId,
+          workspace_id: currentWorkspace.id,
           file_type: fileType,
         })
         .select()
@@ -200,6 +221,18 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
     )
   }
 
+  if (!currentWorkspace) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center text-red-500">
+            <p>Unable to load workspace. Please try refreshing the page.</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -207,6 +240,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
           <FileText className="w-5 h-5" />
           My Documents ({documents.length})
         </CardTitle>
+        <p className="text-sm text-gray-500">Workspace: {currentWorkspace.name}</p>
       </CardHeader>
       <CardContent className="p-0">
         <div className="p-4 border-b">
