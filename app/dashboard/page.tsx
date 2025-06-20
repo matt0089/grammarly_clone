@@ -74,13 +74,17 @@ export default function Dashboard() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to fetch workspaces")
+        const errorData = await response.json()
+        console.error("API Error:", errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
 
       const data = await response.json()
       setWorkspaces(data.workspaces || [])
     } catch (error) {
       console.error("Error fetching workspaces:", error)
+      // Show user-friendly error message
+      alert(`Failed to load workspaces: ${error instanceof Error ? error.message : "Unknown error"}`)
     }
   }
 
