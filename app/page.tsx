@@ -8,7 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { FileText, Settings, LogOut, Save, Clock, BarChart3, PanelLeft } from "lucide-react"
+import {
+  FileText,
+  Settings,
+  LogOut,
+  Save,
+  Clock,
+  BarChart3,
+  PanelLeft,
+  ChevronUp,
+  ChevronDown,
+  Lightbulb,
+} from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
@@ -27,9 +38,14 @@ export default function GrammarlyClone() {
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isTipsExpanded, setIsTipsExpanded] = useState(false)
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed)
+  }
+
+  const toggleTips = () => {
+    setIsTipsExpanded(!isTipsExpanded)
   }
 
   const saveDocument = async (content: string) => {
@@ -104,9 +120,9 @@ export default function GrammarlyClone() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
@@ -195,108 +211,126 @@ export default function GrammarlyClone() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto p-6">
-        <div
-          className={`grid grid-cols-1 gap-6 transition-all duration-300 ${
-            isSidebarCollapsed ? "lg:grid-cols-2" : "lg:grid-cols-3"
-          }`}
-        >
-          {/* Document Manager Sidebar */}
-          {!isSidebarCollapsed && (
-            <div className="lg:col-span-1">
-              <DocumentManager
-                userId={user.id}
-                onSelectDocument={setSelectedDocument}
-                selectedDocument={selectedDocument}
-              />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="max-w-7xl mx-auto px-2 py-6 flex-1 flex flex-col">
+          <div className="flex gap-6 flex-1 overflow-hidden">
+            {/* Document Manager Sidebar */}
+            {!isSidebarCollapsed && (
+              <div className="w-64 flex-shrink-0">
+                <DocumentManager
+                  userId={user.id}
+                  onSelectDocument={setSelectedDocument}
+                  selectedDocument={selectedDocument}
+                />
+              </div>
+            )}
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex gap-6 flex-col overflow-hidden">
+              {/* Text Editor */}
+              <div className={`transition-all duration-300 ${isTipsExpanded ? "flex-1" : "flex-1"}`}>
+                <Card className="h-full">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        {selectedDocument ? selectedDocument.title : "Select a document"}
+                      </CardTitle>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span>{stats.words} words</span>
+                        <span>{stats.characters} characters</span>
+                        {selectedDocument && (
+                          <Button variant="outline" size="sm" onClick={() => saveDocument(text)} disabled={isSaving}>
+                            <Save className="w-4 h-4 mr-2" />
+                            {isSaving ? "Saving..." : "Save"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="h-full pb-6">
+                    <div className="relative h-full">
+                      <textarea
+                        ref={editorRef}
+                        value={text}
+                        onChange={(e) => handleTextChange(e.target.value)}
+                        className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm leading-relaxed"
+                        placeholder={selectedDocument ? "Start writing here..." : "Select a document to start writing"}
+                        disabled={!selectedDocument}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Writing Tips Drawer */}
+              <div
+                className={`transition-all duration-300 ease-in-out ${isTipsExpanded ? "h-80" : "h-12"} flex-shrink-0`}
+              >
+                <Card className="h-full">
+                  {/* Drawer Header - Always Visible */}
+                  <div
+                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={toggleTips}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Lightbulb className="w-5 h-5 text-yellow-600" />
+                      <CardTitle className="text-lg">Writing Tips</CardTitle>
+                    </div>
+                    <Button variant="ghost" size="sm">
+                      {isTipsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </Button>
+                  </div>
+
+                  {/* Drawer Content - Expandable */}
+                  {isTipsExpanded && (
+                    <CardContent className="pt-0 h-full">
+                      <ScrollArea className="h-64">
+                        <div className="space-y-3 pr-4">
+                          <div className="p-3 bg-blue-50 rounded-lg">
+                            <h4 className="font-medium text-sm text-blue-900 mb-1">Keep it Simple</h4>
+                            <p className="text-xs text-blue-700">
+                              Use clear, concise language that your readers can easily understand.
+                            </p>
+                          </div>
+                          <div className="p-3 bg-green-50 rounded-lg">
+                            <h4 className="font-medium text-sm text-green-900 mb-1">Active Voice</h4>
+                            <p className="text-xs text-green-700">
+                              Use active voice to make your writing more direct and engaging.
+                            </p>
+                          </div>
+                          <div className="p-3 bg-purple-50 rounded-lg">
+                            <h4 className="font-medium text-sm text-purple-900 mb-1">Vary Sentence Length</h4>
+                            <p className="text-xs text-purple-700">
+                              Mix short and long sentences to create rhythm in your writing.
+                            </p>
+                          </div>
+                          <div className="p-3 bg-orange-50 rounded-lg">
+                            <h4 className="font-medium text-sm text-orange-900 mb-1">Show, Don't Tell</h4>
+                            <p className="text-xs text-orange-700">
+                              Use specific examples and details to illustrate your points.
+                            </p>
+                          </div>
+                          <div className="p-3 bg-red-50 rounded-lg">
+                            <h4 className="font-medium text-sm text-red-900 mb-1">Edit Ruthlessly</h4>
+                            <p className="text-xs text-red-700">
+                              Remove unnecessary words and phrases to make your writing more impactful.
+                            </p>
+                          </div>
+                          <div className="p-3 bg-yellow-50 rounded-lg">
+                            <h4 className="font-medium text-sm text-yellow-900 mb-1">Read Aloud</h4>
+                            <p className="text-xs text-yellow-700">
+                              Reading your work aloud helps identify awkward phrasing and flow issues.
+                            </p>
+                          </div>
+                        </div>
+                      </ScrollArea>
+                    </CardContent>
+                  )}
+                </Card>
+              </div>
             </div>
-          )}
-
-          {/* Main Editor */}
-          <div className={`${isSidebarCollapsed ? "lg:col-span-1" : "lg:col-span-2"}`}>
-            <Card className="h-[600px]">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    {selectedDocument ? selectedDocument.title : "Select a document"}
-                  </CardTitle>
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <span>{stats.words} words</span>
-                    <span>{stats.characters} characters</span>
-                    {selectedDocument && (
-                      <Button variant="outline" size="sm" onClick={() => saveDocument(text)} disabled={isSaving}>
-                        <Save className="w-4 h-4 mr-2" />
-                        {isSaving ? "Saving..." : "Save"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="h-full pb-6">
-                <div className="relative h-full">
-                  <textarea
-                    ref={editorRef}
-                    value={text}
-                    onChange={(e) => handleTextChange(e.target.value)}
-                    className="w-full h-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm leading-relaxed"
-                    placeholder={selectedDocument ? "Start writing here..." : "Select a document to start writing"}
-                    disabled={!selectedDocument}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Writing Tips Card */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Writing Tips</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[520px]">
-                  <div className="space-y-3 pr-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <h4 className="font-medium text-sm text-blue-900 mb-1">Keep it Simple</h4>
-                      <p className="text-xs text-blue-700">
-                        Use clear, concise language that your readers can easily understand.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <h4 className="font-medium text-sm text-green-900 mb-1">Active Voice</h4>
-                      <p className="text-xs text-green-700">
-                        Use active voice to make your writing more direct and engaging.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <h4 className="font-medium text-sm text-purple-900 mb-1">Vary Sentence Length</h4>
-                      <p className="text-xs text-purple-700">
-                        Mix short and long sentences to create rhythm in your writing.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-orange-50 rounded-lg">
-                      <h4 className="font-medium text-sm text-orange-900 mb-1">Show, Don't Tell</h4>
-                      <p className="text-xs text-orange-700">
-                        Use specific examples and details to illustrate your points.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-red-50 rounded-lg">
-                      <h4 className="font-medium text-sm text-red-900 mb-1">Edit Ruthlessly</h4>
-                      <p className="text-xs text-red-700">
-                        Remove unnecessary words and phrases to make your writing more impactful.
-                      </p>
-                    </div>
-                    <div className="p-3 bg-yellow-50 rounded-lg">
-                      <h4 className="font-medium text-sm text-yellow-900 mb-1">Read Aloud</h4>
-                      <p className="text-xs text-yellow-700">
-                        Reading your work aloud helps identify awkward phrasing and flow issues.
-                      </p>
-                    </div>
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>
