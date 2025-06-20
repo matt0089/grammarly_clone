@@ -111,4 +111,30 @@ export async function runIndexingJob(workspaceId: string) {
     console.error(`[Indexing Job] Failed for workspace ${workspaceId}:`, error);
     await supabase.from('workspaces').update({ indexing_status: 'FAILED' }).eq('id', workspaceId);
   }
+}
+
+/**
+ * Retrieves the file path for a given function in a workspace.
+ * 
+ * @param {string} workspaceId - The ID of the workspace.
+ * @param {string} functionName - The name of the function.
+ * @returns {Promise<string>} A promise that resolves to the file path of the function.
+ * @throws Will throw an error if the function location cannot be found.
+ */
+export async function getFunctionLocation(workspaceId: string, functionName: string): Promise<string> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('function_declarations')
+    .select('file_path')
+    .eq('workspace_id', workspaceId)
+    .eq('function_name', functionName)
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    console.error(`Error fetching location for function "${functionName}" in workspace ${workspaceId}:`, error);
+    throw new Error(`Could not find location for function "${functionName}".`);
+  }
+
+  return data.file_path;
 } 

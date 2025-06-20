@@ -6,7 +6,7 @@
 
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { DocumentManager } from '@/components/document-manager';
@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import type { Database } from '@/lib/database.types';
 import { calculateFleschReadingEase, type ReadabilityResult } from '@/lib/readability';
 import { type DocumentSuggestion } from '@/lib/ai-service';
-import { Settings, LogOut, FileText } from 'lucide-react';
+import { Settings, LogOut, FileText, Info } from 'lucide-react';
 import Link from 'next/link';
 
 type Document = Database['public']['Tables']['documents']['Row'];
@@ -36,8 +36,11 @@ export default function WorkspacePage() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [documentContent, setDocumentContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingDocs, setIsGeneratingDocs] = useState(false);
   const [readabilityResult, setReadabilityResult] = useState<ReadabilityResult | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [selectedText, setSelectedText] = useState('');
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const params = useParams();
   const workspaceId = params.workspaceId as string;
   const supabase = createClient();
@@ -152,7 +155,77 @@ export default function WorkspacePage() {
     setSelectedDocument(updatedDocument);
     toast.success("Document metadata saved!");
   }
+
+  const handleTextSelection = () => {
+    const textarea = editorRef.current;
+    if (textarea) {
+      const text = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
+      setSelectedText(text);
+    }
+  };
   
+  const handleGenerateDocs = async () => {
+    if (!selectedText || !workspaceId || !selectedDocument) {
+      toast.error('Please select a function name first.');
+      return;
+    }
+
+    setIsGeneratingDocs(true);
+    const textarea = editorRef.current;
+    if (!textarea) {
+      setIsGeneratingDocs(false);
+      return;
+    }
+
+    const { selectionStart, selectionEnd } = textarea;
+
+    try {
+      const response = await fetch('/api/generate-doc', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workspaceId,
+          functionName: selectedText,
+          documentType: selectedDocument.file_type === 'ts' ? 'TSDoc' : 'JSDoc',
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate documentation.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let generatedText = '';
+
+      // Streaming the response
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        generatedText += chunk;
+        
+        const newContent = 
+          documentContent.substring(0, selectionStart) +
+          generatedText +
+          documentContent.substring(selectionEnd);
+        
+        setDocumentContent(newContent);
+      }
+
+    } catch (error) {
+      console.error('Error generating documentation:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast.error(`Failed to generate docs: ${errorMessage}`);
+    } finally {
+      setIsGeneratingDocs(false);
+    }
+  };
+
   if (!workspaceId) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -210,14 +283,23 @@ export default function WorkspacePage() {
                 <h1 className="text-2xl font-bold">{selectedDocument.title}</h1>
                 <div className="flex items-center gap-2">
                   <DocumentMetadataModal document={selectedDocument} onMetadataUpdate={handleMetadataUpdate} />
+                  <Button variant="outline" size="sm">
+                    <Info className="w-4 h-4 mr-2" />
+                    Doc Info
+                  </Button>
+                  <Button onClick={handleGenerateDocs} disabled={!selectedText || isGeneratingDocs}>
+                    {isGeneratingDocs ? 'Generating...' : 'Generate Docs'}
+                  </Button>
                   <Button onClick={handleSave} disabled={isSaving}>
                     {isSaving ? 'Saving...' : 'Save'}
                   </Button>
                 </div>
               </div>
               <Textarea
+                ref={editorRef}
                 value={documentContent}
                 onChange={handleContentChange}
+                onSelect={handleTextSelection}
                 className="flex-1 w-full h-full p-4 text-lg border rounded-md"
                 placeholder="Start writing..."
               />

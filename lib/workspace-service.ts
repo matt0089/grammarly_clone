@@ -158,3 +158,32 @@ export async function getWorkspace(
 
   return data;
 }
+
+/**
+ * Fetches the GitHub details for a given workspace.
+ *
+ * @param {SupabaseClient<Database>} client - The Supabase client instance.
+ * @param {string} workspaceId - The ID of the workspace.
+ * @returns {Promise<{ github_repo_url: string; git_commit_sha: string; }>} A promise that resolves to the workspace's GitHub details.
+ * @throws Will throw an error if the workspace is not found or does not have GitHub details.
+ */
+export async function getWorkspaceGithubDetails(
+  client: SupabaseClient<Database>,
+  workspaceId: string
+): Promise<{ github_repo_url: string; git_commit_sha: string; }> {
+  const { data, error } = await client
+    .from('workspaces')
+    .select('github_repo_url, git_commit_sha')
+    .eq('id', workspaceId)
+    .single();
+
+  if (error || !data || !data.github_repo_url || !data.git_commit_sha) {
+    console.error('Error fetching workspace GitHub details:', error);
+    throw new Error('Could not fetch workspace GitHub details or details are missing.');
+  }
+
+  return {
+    github_repo_url: data.github_repo_url,
+    git_commit_sha: data.git_commit_sha,
+  };
+}
