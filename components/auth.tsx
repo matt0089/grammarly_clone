@@ -13,10 +13,10 @@ import { User, Mail, Lock, UserPlus } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 
 interface AuthProps {
-  onAuthChange: (user: SupabaseUser | null) => void
+  onAuthSuccess: (user: SupabaseUser | null) => void
 }
 
-export function Auth({ onAuthChange }: AuthProps) {
+export function Auth({ onAuthSuccess }: AuthProps) {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -25,19 +25,38 @@ export function Auth({ onAuthChange }: AuthProps) {
 
   useEffect(() => {
     // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      onAuthChange(session?.user ?? null)
-    })
+    const checkSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (session?.user) {
+          onAuthSuccess(session.user)
+        }
+      } catch (error) {
+        console.error("Error checking session:", error)
+      }
+    }
+
+    checkSession()
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      onAuthChange(session?.user ?? null)
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      try {
+        if (event === "SIGNED_IN" && session?.user) {
+          onAuthSuccess(session.user)
+        } else if (event === "SIGNED_OUT") {
+          onAuthSuccess(null)
+        }
+      } catch (error) {
+        console.error("Error handling auth state change:", error)
+      }
     })
 
     return () => subscription.unsubscribe()
-  }, [onAuthChange])
+  }, [onAuthSuccess])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -81,7 +81,15 @@ export default function GrammarlyClone() {
     try {
       const {
         data: { session },
+        error,
       } = await supabase.auth.getSession()
+
+      if (error) {
+        console.error("Session error:", error)
+        setUser(null)
+        setLoading(false)
+        return
+      }
 
       if (session?.user) {
         // User is logged in, redirect to dashboard
@@ -105,10 +113,14 @@ export default function GrammarlyClone() {
     setText("")
   }
 
-  const handleAuthSuccess = (user: SupabaseUser) => {
-    setUser(user)
-    // Redirect to dashboard after successful authentication
-    router.push("/dashboard")
+  const handleAuthSuccess = (user: SupabaseUser | null) => {
+    if (user) {
+      setUser(user)
+      // Redirect to dashboard after successful authentication
+      router.push("/dashboard")
+    } else {
+      setUser(null)
+    }
   }
 
   useEffect(() => {
@@ -153,7 +165,11 @@ export default function GrammarlyClone() {
   }
 
   if (!user) {
-    return <Auth onAuthSuccess={handleAuthSuccess} />
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Auth onAuthSuccess={handleAuthSuccess} />
+      </div>
+    )
   }
 
   return (
