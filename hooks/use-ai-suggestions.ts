@@ -18,7 +18,7 @@ export function useAISuggestions(text: string): UseAISuggestionsReturn {
   const timeoutRef = useRef<NodeJS.Timeout>()
   const lastTextRef = useRef("")
 
-  const processSuggestions = useCallback(async (textToProcess: string) => {
+  const processSuggestions = useCallback(async (textToProcess: string, forceRefresh = false) => {
     if (!textToProcess.trim()) {
       setSuggestions([])
       setIsProcessingAI(false)
@@ -27,7 +27,7 @@ export function useAISuggestions(text: string): UseAISuggestionsReturn {
 
     try {
       setError(null)
-      const result = await hybridProcessor.getSuggestions(textToProcess)
+      const result = await hybridProcessor.getSuggestions(textToProcess, forceRefresh)
       setSuggestions(result.suggestions)
       setIsProcessingAI(result.isProcessingAI)
     } catch (err) {
@@ -55,7 +55,12 @@ export function useAISuggestions(text: string): UseAISuggestionsReturn {
 
   const refreshSuggestions = useCallback(() => {
     if (lastTextRef.current) {
-      processSuggestions(lastTextRef.current)
+      // Clear any existing timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      // Force immediate processing with refresh flag
+      processSuggestions(lastTextRef.current, true)
     }
   }, [processSuggestions])
 
