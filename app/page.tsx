@@ -414,7 +414,7 @@ export default function GrammarlyClone() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
               <CheckCircle2 className="w-5 h-5 text-white" />
@@ -432,7 +432,7 @@ export default function GrammarlyClone() {
             )}
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+            <span className="text-sm text-gray-600">Welcome, email@example.com</span>
             <Button variant="ghost" size="sm">
               <Settings className="w-4 h-4 mr-2" />
               Settings
@@ -445,8 +445,8 @@ export default function GrammarlyClone() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      <div className="w-full px-6 py-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Document Manager Sidebar */}
           <div className="lg:col-span-1">
             <DocumentManager
