@@ -1,15 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import { Auth } from "@/components/auth"
 import { DocumentManager } from "@/components/document-manager"
 import { DocumentMetadataModal } from "@/components/document-metadata-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { FileText, Settings, LogOut, Save, Clock, BarChart3, PanelLeft } from "lucide-react"
+import { FileText, Settings, LogOut, Save, Clock, BarChart3, PanelLeft, ArrowLeft } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
@@ -18,10 +17,15 @@ import { SuggestedEdits } from "@/components/suggested-edits"
 import { aiService, type DocumentSuggestion } from "@/lib/ai-service"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
+type Workspace = Database["public"]["Tables"]["workspaces"]["Row"]
 
-export default function GrammarlyClone() {
+export default function WorkspacePage() {
   const router = useRouter()
+  const params = useParams()
+  const workspaceId = params.workspaceId as string
+
   const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
   const [text, setText] = useState("")
   const [isSaving, setIsSaving] = useState(false)
@@ -29,9 +33,48 @@ export default function GrammarlyClone() {
   const [readabilityScore, setReadabilityScore] = useState<ReadabilityResult | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
-  const [loading, setLoading] = useState(true)
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    checkUserAndWorkspace()
+  }, [workspaceId])
+
+  const checkUserAndWorkspace = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.user) {
+        router.push("/")
+        return
+      }
+
+      setUser(session.user)
+
+      // Fetch workspace details
+      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          router.push("/dashboard")
+          return
+        }
+        throw new Error("Failed to fetch workspace")
+      }
+
+      const data = await response.json()
+      setWorkspace(data.workspace)
+    } catch (error) {
+      console.error("Error checking user/workspace:", error)
+      router.push("/dashboard")
+    }
+  }
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed)
@@ -77,35 +120,6 @@ export default function GrammarlyClone() {
     setSelectedDocument(updatedDocument)
   }
 
-  const checkUser = async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (session?.user) {
-        // User is logged in, redirect to dashboard
-        router.push("/dashboard")
-      } else {
-        setLoading(false)
-      }
-    } catch (error) {
-      console.error("Error checking user:", error)
-      setLoading(false)
-    }
-  }
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setSelectedDocument(null)
-    setText("")
-  }
-
-  useEffect(() => {
-    checkUser()
-  }, [])
-
   useEffect(() => {
     if (selectedDocument) {
       setText(selectedDocument.content)
@@ -113,6 +127,16 @@ export default function GrammarlyClone() {
       setText("")
     }
   }, [selectedDocument])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    router.push("/")
+  }
+
+  const goToDashboard = () => {
+    router.push("/dashboard")
+  }
 
   const stats = {
     words: text
@@ -130,21 +154,17 @@ export default function GrammarlyClone() {
     ), // Assuming 200 words per minute
   }
 
-  if (loading) {
+  if (!user || !workspace) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center mx-auto mb-4">
-            <div className="w-5 h-5 bg-white rounded-sm" />
+            <FileText className="w-5 h-5 text-white" />
           </div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">Loading workspace...</p>
         </div>
       </div>
     )
-  }
-
-  if (!user) {
-    return <Auth onAuthChange={setUser} />
   }
 
   return (
@@ -153,10 +173,17 @@ export default function GrammarlyClone() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={goToDashboard}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Dashboard
+            </Button>
             <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
               <FileText className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-semibold text-gray-900">DocWise AI</h1>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">DocWise AI</h1>
+              <p className="text-sm text-gray-600">{workspace.name}</p>
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -230,7 +257,7 @@ export default function GrammarlyClone() {
               </DialogContent>
             </Dialog>
 
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={goToDashboard}>
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Button>
@@ -249,6 +276,7 @@ export default function GrammarlyClone() {
             <div className="w-64 flex-shrink-0">
               <DocumentManager
                 userId={user.id}
+                workspaceId={workspaceId}
                 onSelectDocument={setSelectedDocument}
                 selectedDocument={selectedDocument}
               />

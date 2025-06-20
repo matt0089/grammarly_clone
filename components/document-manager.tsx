@@ -19,11 +19,12 @@ type Document = Database["public"]["Tables"]["documents"]["Row"]
 
 interface DocumentManagerProps {
   userId: string
+  workspaceId: string
   onSelectDocument: (document: Document | null) => void
   selectedDocument: Document | null
 }
 
-export function DocumentManager({ userId, onSelectDocument, selectedDocument }: DocumentManagerProps) {
+export function DocumentManager({ userId, workspaceId, onSelectDocument, selectedDocument }: DocumentManagerProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [newDocTitle, setNewDocTitle] = useState("")
@@ -33,7 +34,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
 
   useEffect(() => {
     fetchDocuments()
-  }, [userId])
+  }, [userId, workspaceId])
 
   const fetchDocuments = async () => {
     try {
@@ -41,6 +42,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
         .from("documents")
         .select("*")
         .eq("user_id", userId)
+        .eq("workspace_id", workspaceId)
         .order("updated_at", { ascending: false })
 
       if (error) throw error
@@ -63,6 +65,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
           title: newDocTitle,
           content: "",
           user_id: userId,
+          workspace_id: workspaceId,
           file_type: "txt", // Default to txt for new documents
         })
         .select()
@@ -126,6 +129,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
           title: file.name,
           content: content,
           user_id: userId,
+          workspace_id: workspaceId,
           file_type: fileType,
         })
         .select()
