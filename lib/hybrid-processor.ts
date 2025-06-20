@@ -1,5 +1,5 @@
 import type { EnhancedSuggestion } from "./ai-types"
-import { aiSuggestionService } from "./ai-suggestion-service"
+import { clientAIService } from "./client-ai-service"
 import { textProcessor } from "./text-processor"
 
 // Import the original regex rules
@@ -116,7 +116,8 @@ export class HybridProcessor {
     this.lastProcessedText = text
 
     try {
-      const aiSuggestions = await aiSuggestionService.generateSuggestions(text)
+      // Use the client AI service instead of the server-side service
+      const aiSuggestions = await clientAIService.generateSuggestions(text)
       const mergedSuggestions = this.mergeSuggestions(quickSuggestions, aiSuggestions)
 
       // Emit event with enhanced suggestions

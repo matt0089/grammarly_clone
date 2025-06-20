@@ -1,24 +1,22 @@
 import { generateObject } from "ai"
-import { createOpenAI } from "@ai-sdk/openai"
+import { openai } from "@ai-sdk/openai"
 import type { EnhancedSuggestion, TextChunk, AISuggestionResponse } from "./ai-types"
 import { SuggestionSchema } from "./ai-types"
 import { textProcessor } from "./text-processor"
 import { suggestionCache } from "./suggestion-cache"
 
 export class AISuggestionService {
-  private readonly openai = createOpenAI({
-    apiKey: process.env.OPENAI_API_KEY, // Explicitly specify the API key
-    // You can also add other configuration options here:
-    // baseURL: 'https://api.openai.com/v1', // Custom base URL if needed
-    // organization: 'your-org-id', // If you have an organization
-  })
-
-  private readonly model = this.openai("gpt-4o")
+  private readonly model = openai("gpt-4o-mini") // This will only work on server side
 
   /**
-   * Generate AI-powered suggestions for text
+   * Generate AI-powered suggestions for text (SERVER SIDE ONLY)
    */
   async generateSuggestions(text: string, context?: string): Promise<EnhancedSuggestion[]> {
+    // Verify we're on the server side
+    if (typeof window !== "undefined") {
+      throw new Error("AISuggestionService can only be used on the server side")
+    }
+
     if (!text.trim()) return []
 
     // Check cache first
@@ -52,9 +50,7 @@ export class AISuggestionService {
     }
   }
 
-  /**
-   * Process a single text chunk
-   */
+  // ... rest of the methods remain the same
   private async processChunk(chunk: TextChunk, globalContext?: string): Promise<EnhancedSuggestion[]> {
     const prompt = this.buildPrompt(chunk.text, chunk.context || globalContext)
 
@@ -73,43 +69,33 @@ export class AISuggestionService {
     }
   }
 
-  /**
-   * Build the prompt for the AI model
-   */
   private buildPrompt(text: string, context?: string): string {
-    return `You are an expert writing assistant powered by GPT-4o. Analyze the following text for writing improvements and provide specific, actionable suggestions.
+    return `You are an expert writing assistant. Analyze the following text for writing improvements and provide specific, actionable suggestions.
 
-Consider these aspects with high precision:
+Consider these aspects:
 - Grammar and spelling errors (mark as "error" severity)
-- Style and clarity issues (mark as "warning" or "suggestion" severity)  
+- Style and clarity issues (mark as "warning" or "suggestion" severity)
 - Conciseness opportunities
 - Active voice recommendations
 - Word choice improvements
 - Sentence structure optimization
-- Tone and readability improvements
-- Context-appropriate language
 
 Guidelines:
 - Focus on the most impactful improvements first
-- Provide exact text positions (character indices within the analyzed text)
-- Give clear, detailed explanations for each suggestion
-- Suggest specific replacements that improve clarity and impact
-- Rate your confidence accurately (0.0 to 1.0)
+- Provide exact text positions (character indices)
+- Give clear explanations for each suggestion
+- Suggest specific replacements
+- Rate your confidence (0.0 to 1.0)
 - Provide contextual reasoning when helpful
-- Consider the overall document context and writing purpose
-- Prioritize suggestions that enhance readability and professional tone
 
-${context ? `Document Context: ${context}` : ""}
+${context ? `Context: ${context}` : ""}
 
 Text to analyze:
 "${text}"
 
-Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing quality, clarity, or impact. Be thorough but selective - quality over quantity.`
+Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing.`
   }
 
-  /**
-   * Transform AI response to our suggestion format
-   */
   private transformToSuggestions(
     aiSuggestions: AISuggestionResponse["suggestions"],
     chunk: TextChunk,
@@ -137,9 +123,6 @@ Provide suggestions in the specified JSON format. Only suggest changes that genu
     })
   }
 
-  /**
-   * Categorize suggestion importance
-   */
   private categorizeSuggestion(severity: string, confidence: number): "critical" | "important" | "minor" {
     if (severity === "error") return "critical"
     if (severity === "warning" && confidence > 0.8) return "important"
@@ -147,9 +130,6 @@ Provide suggestions in the specified JSON format. Only suggest changes that genu
     return "minor"
   }
 
-  /**
-   * Remove duplicate suggestions
-   */
   private deduplicateSuggestions(suggestions: EnhancedSuggestion[]): EnhancedSuggestion[] {
     const seen = new Set<string>()
     return suggestions.filter((suggestion) => {
@@ -160,9 +140,6 @@ Provide suggestions in the specified JSON format. Only suggest changes that genu
     })
   }
 
-  /**
-   * Sort suggestions by importance and position
-   */
   private sortSuggestionsByImportance(suggestions: EnhancedSuggestion[]): EnhancedSuggestion[] {
     const categoryOrder = { critical: 0, important: 1, minor: 2 }
 
