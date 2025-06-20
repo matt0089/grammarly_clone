@@ -13,7 +13,7 @@ import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
 import { ReadabilityDisplay } from "@/components/readability-display"
 import { SuggestedEdits } from "@/components/suggested-edits"
-import type { EditingSuggestion } from "@/lib/ai-editing-service"
+import type { WritingSuggestion } from "@/types/suggestions"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
 
@@ -67,21 +67,6 @@ export default function GrammarlyClone() {
     // Calculate readability score
     const readability = calculateFleschReadingEase(newText)
     setReadabilityScore(readability)
-  }
-
-  const handleApplySuggestion = (suggestion: EditingSuggestion) => {
-    const newText =
-      text.substring(0, suggestion.startIndex) + suggestion.suggested + text.substring(suggestion.endIndex)
-
-    handleTextChange(newText)
-
-    // Focus back to editor
-    if (editorRef.current) {
-      editorRef.current.focus()
-      // Set cursor position after the applied suggestion
-      const newCursorPosition = suggestion.startIndex + suggestion.suggested.length
-      editorRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
-    }
   }
 
   useEffect(() => {
@@ -264,7 +249,17 @@ export default function GrammarlyClone() {
 
             {/* AI Suggested Edits Card - Always on the right */}
             <div className="w-80 flex-shrink-0">
-              <SuggestedEdits text={text} onApplySuggestion={handleApplySuggestion} isEnabled={!!selectedDocument} />
+              <SuggestedEdits
+                content={text}
+                onApplySuggestion={(suggestion: WritingSuggestion) => {
+                  // Apply the suggestion to the text
+                  const newText =
+                    text.substring(0, suggestion.startIndex) +
+                    suggestion.suggestedText +
+                    text.substring(suggestion.endIndex)
+                  handleTextChange(newText)
+                }}
+              />
             </div>
           </div>
         </div>
