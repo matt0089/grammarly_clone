@@ -3,12 +3,42 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      workspaces: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          user_id: string
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          user_id: string
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          user_id?: string
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       documents: {
         Row: {
           id: string
           title: string
           content: string
           user_id: string
+          workspace_id: string
           created_at: string
           updated_at: string
           file_type: string
@@ -20,6 +50,7 @@ export interface Database {
           title: string
           content: string
           user_id: string
+          workspace_id: string
           created_at?: string
           updated_at?: string
           file_type?: string
@@ -31,6 +62,7 @@ export interface Database {
           title?: string
           content?: string
           user_id?: string
+          workspace_id?: string
           created_at?: string
           updated_at?: string
           file_type?: string
