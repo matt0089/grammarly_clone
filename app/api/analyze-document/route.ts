@@ -78,14 +78,19 @@ export async function POST(request: NextRequest) {
     const token = authHeader.replace("Bearer ", "")
     console.log("Token extracted, length:", token.length)
 
-    // Create a server-side Supabase client
-    const supabase = createClient<Database>(
+    // First, verify the user's session with a client using the user's token
+    const userSupabase = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key for server-side
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         auth: {
           autoRefreshToken: false,
           persistSession: false,
+        },
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
       },
     )
@@ -94,7 +99,7 @@ export async function POST(request: NextRequest) {
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser(token)
+    } = await userSupabase.auth.getUser(token)
 
     console.log("Auth verification:", {
       hasUser: !!user,
@@ -107,8 +112,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid authentication" }, { status: 401 })
     }
 
-    // Verify user owns the document
-    const { data: document, error: docError } = await supabase
+    // Now use service role client for database operations (bypasses RLS)
+    const serviceSupabase = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      },
+    )
+
+    // Verify user owns the document using service role (bypasses RLS)
+    const { data: document, error: docError } = await serviceSupabase
       .from("documents")
       .select("id, user_id, title")
       .eq("id", documentId)
