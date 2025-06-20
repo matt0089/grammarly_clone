@@ -6,7 +6,7 @@ import { textProcessor } from "./text-processor"
 import { suggestionCache } from "./suggestion-cache"
 
 export class AISuggestionService {
-  private readonly model = openai("gpt-4o-mini") // Using mini for cost efficiency
+  private readonly model = openai("gpt-4o") // Updated to use GPT-4o for better quality
 
   /**
    * Generate AI-powered suggestions for text
@@ -70,30 +70,34 @@ export class AISuggestionService {
    * Build the prompt for the AI model
    */
   private buildPrompt(text: string, context?: string): string {
-    return `You are an expert writing assistant. Analyze the following text for writing improvements and provide specific, actionable suggestions.
+    return `You are an expert writing assistant powered by GPT-4o. Analyze the following text for writing improvements and provide specific, actionable suggestions.
 
-Consider these aspects:
+Consider these aspects with high precision:
 - Grammar and spelling errors (mark as "error" severity)
-- Style and clarity issues (mark as "warning" or "suggestion" severity)
+- Style and clarity issues (mark as "warning" or "suggestion" severity)  
 - Conciseness opportunities
 - Active voice recommendations
 - Word choice improvements
 - Sentence structure optimization
+- Tone and readability improvements
+- Context-appropriate language
 
 Guidelines:
 - Focus on the most impactful improvements first
-- Provide exact text positions (character indices)
-- Give clear explanations for each suggestion
-- Suggest specific replacements
-- Rate your confidence (0.0 to 1.0)
+- Provide exact text positions (character indices within the analyzed text)
+- Give clear, detailed explanations for each suggestion
+- Suggest specific replacements that improve clarity and impact
+- Rate your confidence accurately (0.0 to 1.0)
 - Provide contextual reasoning when helpful
+- Consider the overall document context and writing purpose
+- Prioritize suggestions that enhance readability and professional tone
 
-${context ? `Context: ${context}` : ""}
+${context ? `Document Context: ${context}` : ""}
 
 Text to analyze:
 "${text}"
 
-Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing.`
+Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing quality, clarity, or impact. Be thorough but selective - quality over quantity.`
   }
 
   /**
