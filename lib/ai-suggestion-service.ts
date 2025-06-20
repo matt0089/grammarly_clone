@@ -1,12 +1,19 @@
 import { generateObject } from "ai"
-import { openai } from "@ai-sdk/openai"
+import { createOpenAI } from "@ai-sdk/openai"
 import type { EnhancedSuggestion, TextChunk, AISuggestionResponse } from "./ai-types"
 import { SuggestionSchema } from "./ai-types"
 import { textProcessor } from "./text-processor"
 import { suggestionCache } from "./suggestion-cache"
 
 export class AISuggestionService {
-  private readonly model = openai("gpt-4o") // Updated to use GPT-4o for better quality
+  private readonly openai = createOpenAI({
+    apiKey: process.env.OPENAI_API_KEY, // Explicitly specify the API key
+    // You can also add other configuration options here:
+    // baseURL: 'https://api.openai.com/v1', // Custom base URL if needed
+    // organization: 'your-org-id', // If you have an organization
+  })
+
+  private readonly model = this.openai("gpt-4o")
 
   /**
    * Generate AI-powered suggestions for text
