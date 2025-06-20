@@ -1,19 +1,13 @@
 import type { TextChunk } from "./ai-types"
 
 export class TextProcessor {
-  private readonly MAX_CHUNK_SIZE = 500 // Reduced from 1000
+  private readonly MAX_CHUNK_SIZE = 500 // Reduced from 1000 to save memory
   private readonly CONTEXT_OVERLAP = 50 // Reduced from 100
 
   /**
    * Split text into logical chunks with context overlap
    */
   chunkText(text: string): TextChunk[] {
-    // Limit total text size to prevent memory issues
-    const MAX_TEXT_LENGTH = 5000
-    if (text.length > MAX_TEXT_LENGTH) {
-      text = text.slice(0, MAX_TEXT_LENGTH)
-    }
-
     if (text.length <= this.MAX_CHUNK_SIZE) {
       return [{ text, startIndex: 0, endIndex: text.length }]
     }
@@ -21,7 +15,11 @@ export class TextProcessor {
     const chunks: TextChunk[] = []
     let currentIndex = 0
 
-    while (currentIndex < text.length) {
+    // Limit total chunks to prevent memory issues
+    const maxChunks = 5
+    let chunkCount = 0
+
+    while (currentIndex < text.length && chunkCount < maxChunks) {
       const endIndex = Math.min(currentIndex + this.MAX_CHUNK_SIZE, text.length)
 
       // Try to break at sentence boundaries
@@ -34,7 +32,9 @@ export class TextProcessor {
       }
 
       const chunkText = text.slice(currentIndex, actualEndIndex)
-      const context = this.getContext(text, currentIndex, actualEndIndex)
+
+      // Simplified context to reduce memory usage
+      const context = this.getSimpleContext(text, currentIndex, actualEndIndex)
 
       chunks.push({
         text: chunkText,
@@ -45,6 +45,7 @@ export class TextProcessor {
 
       currentIndex = actualEndIndex - this.CONTEXT_OVERLAP
       if (currentIndex >= actualEndIndex) break
+      chunkCount++
     }
 
     return chunks
@@ -54,14 +55,15 @@ export class TextProcessor {
    * Find the end of a sentence near the target position
    */
   private findSentenceEnd(text: string, start: number, target: number): number {
-    const searchText = text.slice(start, Math.min(target + 100, text.length))
+    const searchText = text.slice(start, Math.min(target + 50, text.length)) // Reduced search range
     const sentenceEnders = /[.!?]\s+/g
     let match
     let lastEnd = target
 
     while ((match = sentenceEnders.exec(searchText)) !== null) {
       const absolutePos = start + match.index + match[0].length
-      if (absolutePos <= target + 50) {
+      if (absolutePos <= target + 25) {
+        // Reduced tolerance
         lastEnd = absolutePos
       } else {
         break
@@ -72,16 +74,14 @@ export class TextProcessor {
   }
 
   /**
-   * Get surrounding context for a text chunk
+   * Get simplified context for a text chunk
    */
-  private getContext(text: string, start: number, end: number): string {
+  private getSimpleContext(text: string, start: number, end: number): string {
     const contextStart = Math.max(0, start - this.CONTEXT_OVERLAP)
     const contextEnd = Math.min(text.length, end + this.CONTEXT_OVERLAP)
 
-    const beforeContext = text.slice(contextStart, start)
-    const afterContext = text.slice(end, contextEnd)
-
-    return `${beforeContext}[FOCUS]${text.slice(start, end)}[/FOCUS]${afterContext}`
+    // Simplified context without markers to reduce memory
+    return text.slice(contextStart, contextEnd)
   }
 
   /**
@@ -89,8 +89,10 @@ export class TextProcessor {
    */
   generateTextHash(text: string): string {
     let hash = 0
-    for (let i = 0; i < text.length; i++) {
-      const char = text.charCodeAt(i)
+    // Process only first 1000 chars for hash to save memory
+    const hashText = text.slice(0, 1000)
+    for (let i = 0; i < hashText.length; i++) {
+      const char = hashText.charCodeAt(i)
       hash = (hash << 5) - hash + char
       hash = hash & hash // Convert to 32-bit integer
     }
@@ -108,9 +110,9 @@ export class TextProcessor {
 
     if (lengthDiff > lengthThreshold) return true
 
-    // Check for substantial word changes
-    const newWords = newText.toLowerCase().split(/\s+/)
-    const oldWords = oldText.toLowerCase().split(/\s+/)
+    // Simplified word comparison to save memory
+    const newWords = newText.slice(0, 500).toLowerCase().split(/\s+/) // Only check first 500 chars
+    const oldWords = oldText.slice(0, 500).toLowerCase().split(/\s+/)
 
     const wordDiff = Math.abs(newWords.length - oldWords.length)
     return wordDiff > Math.max(2, oldWords.length * 0.1) // 10% or 2 words

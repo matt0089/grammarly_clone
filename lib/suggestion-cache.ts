@@ -2,8 +2,8 @@ import type { EnhancedSuggestion, CachedSuggestion } from "./ai-types"
 
 export class SuggestionCache {
   private cache = new Map<string, CachedSuggestion>()
-  private readonly MAX_CACHE_SIZE = 20 // Reduced from 100
-  private readonly CACHE_TTL = 2 * 60 * 1000 // Reduced to 2 minutes
+  private readonly MAX_CACHE_SIZE = 100
+  private readonly CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
   /**
    * Get cached suggestions if available and valid
@@ -26,11 +26,10 @@ export class SuggestionCache {
    * Cache suggestions with TTL
    */
   cacheSuggestions(textHash: string, suggestions: EnhancedSuggestion[]): void {
-    // More aggressive LRU eviction
+    // Implement LRU eviction if cache is full
     if (this.cache.size >= this.MAX_CACHE_SIZE) {
-      // Remove oldest 25% of entries when cache is full
-      const keysToRemove = Array.from(this.cache.keys()).slice(0, Math.floor(this.MAX_CACHE_SIZE * 0.25))
-      keysToRemove.forEach((key) => this.cache.delete(key))
+      const oldestKey = this.cache.keys().next().value
+      this.cache.delete(oldestKey)
     }
 
     this.cache.set(textHash, {

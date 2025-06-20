@@ -6,9 +6,7 @@ import { textProcessor } from "./text-processor"
 import { suggestionCache } from "./suggestion-cache"
 
 export class AISuggestionService {
-  private readonly model = openai("gpt-4o-mini")
-  private processingCount = 0
-  private readonly MAX_CONCURRENT_REQUESTS = 3
+  private readonly model = openai("gpt-4o-mini") // Using mini model to reduce memory usage
 
   /**
    * Generate AI-powered suggestions for text (SERVER SIDE ONLY)
@@ -19,39 +17,40 @@ export class AISuggestionService {
       throw new Error("AISuggestionService can only be used on the server side")
     }
 
-    // Limit concurrent processing to prevent memory overload
-    if (this.processingCount >= this.MAX_CONCURRENT_REQUESTS) {
-      throw new Error("Too many concurrent requests. Please try again later.")
+    if (!text.trim()) return []
+
+    // Add text length limits to prevent memory issues
+    if (text.length > 5000) {
+      console.warn(`Text too long (${text.length} chars), truncating to 5000 chars`)
+      text = text.slice(0, 5000)
     }
 
-    this.processingCount++
+    // Check cache first
+    const textHash = textProcessor.generateTextHash(text)
+    const cached = suggestionCache.getCachedSuggestions(textHash)
+    if (cached) {
+      return cached
+    }
 
     try {
-      if (!text.trim()) return []
-
-      // Stricter text length limit
-      if (text.length > 3000) {
-        text = text.slice(0, 3000)
-      }
-
-      // Check cache first
-      const textHash = textProcessor.generateTextHash(text)
-      const cached = suggestionCache.getCachedSuggestions(textHash)
-      if (cached) {
-        return cached
-      }
-
-      // Process text in chunks if it's too long
+      // Process text in smaller chunks to reduce memory usage
       const chunks = textProcessor.chunkText(text)
       const allSuggestions: EnhancedSuggestion[] = []
 
-      // Process chunks sequentially to reduce memory pressure
+      // Process chunks sequentially instead of in parallel to reduce memory pressure
       for (const chunk of chunks) {
-        const chunkSuggestions = await this.processChunk(chunk, context)
-        allSuggestions.push(...chunkSuggestions)
+        try {
+          const chunkSuggestions = await this.processChunk(chunk, context)
+          allSuggestions.push(...chunkSuggestions)
 
-        // Small delay to allow garbage collection
-        await new Promise((resolve) => setTimeout(resolve, 10))
+          // Add small delay between chunks to prevent overwhelming the API
+          if (chunks.length > 1) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+          }
+        } catch (chunkError) {
+          console.error(`Failed to process chunk starting at ${chunk.startIndex}:`, chunkError)
+          // Continue with other chunks instead of failing completely
+        }
       }
 
       // Deduplicate and sort suggestions
@@ -65,8 +64,6 @@ export class AISuggestionService {
     } catch (error) {
       console.error("AI suggestion generation failed:", error)
       throw error
-    } finally {
-      this.processingCount--
     }
   }
 
@@ -79,7 +76,8 @@ export class AISuggestionService {
         schema: SuggestionSchema,
         prompt,
         temperature: 0.1, // Lower temperature for more consistent results
-        maxRetries: 1, // Reduced retries to prevent hanging
+        maxRetries: 1, // Reduce retries to prevent memory buildup
+        maxTokens: 1000, // Limit response size
       })
 
       return this.transformToSuggestions(result.object.suggestions, chunk)
@@ -90,37 +88,30 @@ export class AISuggestionService {
   }
 
   private buildPrompt(text: string, context?: string): string {
-    return `You are an expert writing assistant. Analyze the following text for writing improvements and provide specific, actionable suggestions.
+    // Shorter, more focused prompt to reduce token usage
+    return `Analyze this text for writing improvements. Focus on the most important issues only.
 
-Consider these aspects:
-- Grammar and spelling errors (mark as "error" severity)
-- Style and clarity issues (mark as "warning" or "suggestion" severity)
-- Conciseness opportunities
-- Active voice recommendations
-- Word choice improvements
-- Sentence structure optimization
+Rules:
+- Maximum 5 suggestions per text
+- Use exact character positions
+- Confidence between 0.0-1.0
+- Only suggest meaningful improvements
 
-Guidelines:
-- Focus on the most impactful improvements first
-- Provide exact text positions (character indices)
-- Give clear explanations for each suggestion
-- Suggest specific replacements
-- Rate your confidence (0.0 to 1.0)
-- Provide contextual reasoning when helpful
+${context ? `Context: ${context.slice(0, 200)}` : ""}
 
-${context ? `Context: ${context}` : ""}
+Text: "${text}"
 
-Text to analyze:
-"${text}"
-
-Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing.`
+Return JSON with suggestions array.`
   }
 
   private transformToSuggestions(
     aiSuggestions: AISuggestionResponse["suggestions"],
     chunk: TextChunk,
   ): EnhancedSuggestion[] {
-    return aiSuggestions.map((suggestion, index) => {
+    // Limit the number of suggestions to prevent memory issues
+    const limitedSuggestions = aiSuggestions.slice(0, 5)
+
+    return limitedSuggestions.map((suggestion, index) => {
       const category = this.categorizeSuggestion(suggestion.severity, suggestion.confidence)
 
       return {
@@ -138,7 +129,7 @@ Provide suggestions in the specified JSON format. Only suggest changes that genu
         category,
         aiGenerated: true,
         contextualReason: suggestion.contextualReason,
-        alternativeOptions: suggestion.alternativeOptions,
+        alternativeOptions: suggestion.alternativeOptions?.slice(0, 3), // Limit alternatives
       }
     })
   }
@@ -163,18 +154,20 @@ Provide suggestions in the specified JSON format. Only suggest changes that genu
   private sortSuggestionsByImportance(suggestions: EnhancedSuggestion[]): EnhancedSuggestion[] {
     const categoryOrder = { critical: 0, important: 1, minor: 2 }
 
-    return suggestions.sort((a, b) => {
-      // First by category
-      const categoryDiff = categoryOrder[a.category] - categoryOrder[b.category]
-      if (categoryDiff !== 0) return categoryDiff
+    return suggestions
+      .sort((a, b) => {
+        // First by category
+        const categoryDiff = categoryOrder[a.category] - categoryOrder[b.category]
+        if (categoryDiff !== 0) return categoryDiff
 
-      // Then by confidence
-      const confidenceDiff = b.confidence - a.confidence
-      if (Math.abs(confidenceDiff) > 0.1) return confidenceDiff
+        // Then by confidence
+        const confidenceDiff = b.confidence - a.confidence
+        if (Math.abs(confidenceDiff) > 0.1) return confidenceDiff
 
-      // Finally by position
-      return a.position.start - b.position.start
-    })
+        // Finally by position
+        return a.position.start - b.position.start
+      })
+      .slice(0, 10) // Limit total suggestions to prevent memory issues
   }
 }
 
