@@ -285,6 +285,7 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                   onClick={() => onSelectDocument(document)}
+                  title={document.document_goal || undefined}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
@@ -297,6 +298,11 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
                         <Badge variant="outline" className="text-xs">
                           {document.file_type || "txt"}
                         </Badge>
+                        {document.document_type && (
+                          <Badge variant="secondary" className="text-xs">
+                            {document.document_type}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
