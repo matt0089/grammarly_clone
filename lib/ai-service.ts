@@ -70,14 +70,31 @@ export class AIService {
 
   private async performAnalysis(content: string, documentId: string): Promise<SuggestionResponse> {
     try {
-      // Get the current session token
+      console.log("Starting analysis request for document:", documentId)
+
+      // Get the current session
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession()
 
+      console.log("Session check:", {
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        sessionError: sessionError?.message,
+      })
+
+      if (sessionError) {
+        console.error("Session error:", sessionError)
+        throw new Error("Session error: " + sessionError.message)
+      }
+
       if (!session?.access_token) {
+        console.error("No valid session found")
         throw new Error("No valid session found")
       }
+
+      console.log("Making API request to /api/analyze-document")
 
       // Call our secure API route
       const response = await fetch("/api/analyze-document", {
@@ -92,15 +109,24 @@ export class AIService {
         }),
       })
 
+      console.log("API response status:", response.status)
+
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Analysis failed")
+        console.error("API error response:", errorData)
+        throw new Error(errorData.error || `HTTP ${response.status}: Analysis failed`)
       }
 
       const result: SuggestionResponse = await response.json()
+      console.log("Analysis successful:", {
+        suggestionsCount: result.suggestions.length,
+      })
+
       return result
     } catch (error) {
       console.error("AI analysis error:", error)
+
+      // Return empty result instead of throwing to prevent UI crashes
       return {
         suggestions: [],
         summary: {

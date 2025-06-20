@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
+import type { Database } from "@/lib/database.types"
 
 export interface DocumentSuggestion {
   id: string
@@ -31,17 +32,27 @@ export async function POST(request: NextRequest) {
   try {
     const { content, documentId } = await request.json()
 
+    console.log("API Request received:", {
+      contentLength: content?.length,
+      documentId,
+      hasContent: !!content,
+      hasDocumentId: !!documentId,
+    })
+
     // Validate input
     if (!content || typeof content !== "string") {
+      console.log("Invalid content provided")
       return NextResponse.json({ error: "Content is required" }, { status: 400 })
     }
 
     if (!documentId || typeof documentId !== "string") {
+      console.log("Invalid documentId provided")
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 })
     }
 
     // Check content length
     if (content.trim().length < 50) {
+      console.log("Content too short, returning empty suggestions")
       return NextResponse.json({
         suggestions: [],
         summary: {
@@ -54,49 +65,109 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Verify the user has access to this document (basic security check)
+    // Get the authorization header
     const authHeader = request.headers.get("authorization")
+    console.log("Auth header present:", !!authHeader)
+
     if (!authHeader) {
+      console.log("No authorization header found")
       return NextResponse.json({ error: "Authorization required" }, { status: 401 })
     }
 
     // Extract the token from "Bearer <token>"
     const token = authHeader.replace("Bearer ", "")
+    console.log("Token extracted, length:", token.length)
 
-    // Verify the session with Supabase
+    // Create a server-side Supabase client
+    const supabase = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key for server-side
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      },
+    )
+
+    // Verify the session with the user's access token
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser(token)
 
+    console.log("Auth verification:", {
+      hasUser: !!user,
+      userId: user?.id,
+      authError: authError?.message,
+    })
+
     if (authError || !user) {
+      console.log("Authentication failed:", authError?.message)
       return NextResponse.json({ error: "Invalid authentication" }, { status: 401 })
     }
 
     // Verify user owns the document
     const { data: document, error: docError } = await supabase
       .from("documents")
-      .select("id, user_id")
+      .select("id, user_id, title")
       .eq("id", documentId)
-      .eq("user_id", user.id)
       .single()
 
-    if (docError || !document) {
-      return NextResponse.json({ error: "Document not found or access denied" }, { status: 403 })
+    console.log("Document query result:", {
+      hasDocument: !!document,
+      documentUserId: document?.user_id,
+      currentUserId: user.id,
+      docError: docError?.message,
+      documentTitle: document?.title,
+    })
+
+    if (docError) {
+      console.log("Database error:", docError)
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
+
+    if (!document) {
+      console.log("Document not found in database")
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
+    }
+
+    // Check if user owns the document
+    if (document.user_id !== user.id) {
+      console.log("User does not own document:", {
+        documentOwner: document.user_id,
+        currentUser: user.id,
+      })
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
+
+    console.log("Authorization successful, performing AI analysis")
 
     // Perform AI analysis
     const analysisResult = await performAnalysis(content)
 
+    console.log("Analysis completed:", {
+      suggestionsCount: analysisResult.suggestions.length,
+      totalIssues: analysisResult.summary.totalIssues,
+    })
+
     return NextResponse.json(analysisResult)
   } catch (error) {
     console.error("API Error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
 async function performAnalysis(content: string): Promise<SuggestionResponse> {
   try {
+    console.log("Starting AI analysis for content length:", content.length)
+
     const prompt = `You are an expert writing assistant. Analyze the following text and provide specific, actionable suggestions for improvement. Focus on:
 
 1. Grammar errors (subject-verb agreement, punctuation, etc.)
@@ -136,17 +207,23 @@ Respond with a JSON object in this exact format:
 Limit to the 5 most important suggestions. Ensure all character indices are accurate.`
 
     const { text } = await generateText({
-      model: openai("gpt-4o-mini"), // Using gpt-4o-mini as it's more reliable
+      model: openai("gpt-4o-mini"),
       prompt,
       temperature: 0.3,
       maxTokens: 2000,
     })
+
+    console.log("AI response received, parsing...")
 
     // Parse the AI response
     const aiResponse = parseAIResponse(text, content)
 
     // Generate summary
     const summary = generateSummary(aiResponse.suggestions)
+
+    console.log("Analysis parsing completed:", {
+      validSuggestions: aiResponse.suggestions.length,
+    })
 
     return {
       suggestions: aiResponse.suggestions,
