@@ -49,7 +49,13 @@ export default function GrammarlyClone() {
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
 
   // Use the new AI suggestions hook
-  const { suggestions, isProcessingAI, error: suggestionsError, refreshSuggestions } = useAISuggestions(text)
+  const {
+    suggestions,
+    isProcessingAI,
+    error: suggestionsError,
+    refreshSuggestions,
+    processSuggestions,
+  } = useAISuggestions(text)
 
   const saveDocument = async (content: string) => {
     if (!selectedDocument || !user) return
@@ -288,7 +294,14 @@ export default function GrammarlyClone() {
                     <AlertCircle className="w-5 h-5" />
                     Suggestions ({suggestions.length})
                   </div>
-                  <Button variant="ghost" size="sm" onClick={refreshSuggestions} disabled={isProcessingAI}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      refreshSuggestions()
+                    }}
+                    disabled={isProcessingAI}
+                  >
                     <RefreshCw className={`w-4 h-4 ${isProcessingAI ? "animate-spin" : ""}`} />
                   </Button>
                 </CardTitle>
