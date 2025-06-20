@@ -110,7 +110,7 @@ Respond with a JSON object in this exact format:
 Limit to the 5 most important suggestions. Ensure all character indices are accurate.`
 
       const { text } = await generateText({
-        model: openai("gpt-4o-mini"),
+        model: openai("gpt-4.1-nano"),
         prompt,
         temperature: 0.3,
         maxTokens: 2000,
