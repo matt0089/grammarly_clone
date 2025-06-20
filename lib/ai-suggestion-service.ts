@@ -209,13 +209,16 @@ Guidelines:
 - Suggest specific replacements
 - Rate your confidence (0.0 to 1.0)
 - Provide contextual reasoning when helpful
+- IMPORTANT: Only provide ONE suggestion per phrase or sentence
+- IMPORTANT: Limit your response to a maximum of 10 suggestions total
+- Prioritize the most critical issues first (errors over style suggestions)
 
 ${limitedContext ? `Context: ${limitedContext}` : ""}
 
 Text to analyze:
 "${limitedText}"
 
-Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing.`
+Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing. Return no more than 10 suggestions, with only one suggestion per distinct phrase or sentence.`
   }
 
   private transformToSuggestions(
