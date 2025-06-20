@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase/server"
 import type { Database } from "@/lib/database.types"
+import { getDocument } from "@/lib/document-service"
 
 export interface DocumentSuggestion {
   id: string
@@ -30,13 +31,14 @@ export interface SuggestionResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    const { content, documentId } = await request.json()
+    const { content, documentId, workspaceId } = await request.json()
 
     console.log("API Request received:", {
       contentLength: content?.length,
       documentId,
       hasContent: !!content,
       hasDocumentId: !!documentId,
+      hasWorkspaceId: !!workspaceId,
     })
 
     // Validate input
@@ -48,6 +50,22 @@ export async function POST(request: NextRequest) {
     if (!documentId || typeof documentId !== "string") {
       console.log("Invalid documentId provided")
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 })
+    }
+
+    if (!workspaceId || typeof workspaceId !== "string") {
+      console.log("Invalid workspaceId provided")
+      return NextResponse.json({ error: "Workspace ID is required" }, { status: 400 })
+    }
+
+    // Use the new server-side client to get the user
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      console.log("Unauthorized")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Check content length
@@ -65,97 +83,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get the authorization header
-    const authHeader = request.headers.get("authorization")
-    console.log("Auth header present:", !!authHeader)
-
-    if (!authHeader) {
-      console.log("No authorization header found")
-      return NextResponse.json({ error: "Authorization required" }, { status: 401 })
-    }
-
-    // Extract the token from "Bearer <token>"
-    const token = authHeader.replace("Bearer ", "")
-    console.log("Token extracted, length:", token.length)
-
-    // First, verify the user's session with a client using the user's token
-    const userSupabase = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      },
-    )
-
-    // Verify the session with the user's access token
-    const {
-      data: { user },
-      error: authError,
-    } = await userSupabase.auth.getUser(token)
-
-    console.log("Auth verification:", {
-      hasUser: !!user,
-      userId: user?.id,
-      authError: authError?.message,
-    })
-
-    if (authError || !user) {
-      console.log("Authentication failed:", authError?.message)
-      return NextResponse.json({ error: "Invalid authentication" }, { status: 401 })
-    }
-
-    // Now use service role client for database operations (bypasses RLS)
-    const serviceSupabase = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      },
-    )
-
-    // Verify user owns the document using service role (bypasses RLS)
-    const { data: document, error: docError } = await serviceSupabase
-      .from("documents")
-      .select("id, user_id, title, document_type, document_goal")
-      .eq("id", documentId)
-      .single()
-
-    console.log("Document query result:", {
-      hasDocument: !!document,
-      documentUserId: document?.user_id,
-      currentUserId: user.id,
-      docError: docError?.message,
-      documentTitle: document?.title,
-    })
-
-    if (docError) {
-      console.log("Database error:", docError)
-      return NextResponse.json({ error: "Document not found" }, { status: 404 })
-    }
+    // Verify user owns the document within the workspace using our service
+    // This leverages RLS as the supabase client is user-aware
+    const document = await getDocument(supabase, documentId, workspaceId)
 
     if (!document) {
-      console.log("Document not found in database")
-      return NextResponse.json({ error: "Document not found" }, { status: 404 })
-    }
-
-    // Check if user owns the document
-    if (document.user_id !== user.id) {
-      console.log("User does not own document:", {
-        documentOwner: document.user_id,
-        currentUser: user.id,
-      })
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+      console.log("Document not found or access denied")
+      return NextResponse.json({ error: "Document not found or access denied" }, { status: 404 })
     }
 
     console.log("Authorization successful, performing AI analysis")

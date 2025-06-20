@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,11 +23,16 @@ export function Auth({ onAuthChange }: AuthProps) {
   const [password, setPassword] = useState("")
   const [fullName, setFullName] = useState("")
   const [message, setMessage] = useState("")
+  const router = useRouter()
 
   useEffect(() => {
     // Check current session
     supabase.auth.getSession().then(({ data: { session } }) => {
       onAuthChange(session?.user ?? null)
+      if (session) {
+        // If a session exists on initial load, redirect to dashboard
+        router.push('/dashboard')
+      }
     })
 
     // Listen for auth changes
@@ -34,10 +40,14 @@ export function Auth({ onAuthChange }: AuthProps) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       onAuthChange(session?.user ?? null)
+      if (_event === "SIGNED_IN") {
+        // When user signs in, redirect to dashboard
+        router.push('/dashboard')
+      }
     })
 
     return () => subscription.unsubscribe()
-  }, [onAuthChange])
+  }, [onAuthChange, router])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()

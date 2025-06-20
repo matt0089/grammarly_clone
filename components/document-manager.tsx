@@ -14,76 +14,60 @@ import type { Database } from "@/lib/database.types"
 import { fileProcessorRegistry } from "@/lib/file-processors"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { downloadDocument, downloadDocumentsAsZip, type DownloadableDocument } from "@/lib/download-utils"
-import { WorkspaceService } from "@/lib/workspace-service"
+import { getDocuments } from "@/lib/document-service"
 
 type Document = Database["public"]["Tables"]["documents"]["Row"]
-type Workspace = Database["public"]["Tables"]["workspaces"]["Row"]
 
 interface DocumentManagerProps {
-  userId: string
+  workspaceId: string
   onSelectDocument: (document: Document | null) => void
   selectedDocument: Document | null
 }
 
-export function DocumentManager({ userId, onSelectDocument, selectedDocument }: DocumentManagerProps) {
+export function DocumentManager({ workspaceId, onSelectDocument, selectedDocument }: DocumentManagerProps) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [newDocTitle, setNewDocTitle] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
 
   useEffect(() => {
-    initializeWorkspaceAndDocuments()
-  }, [userId])
+    if (workspaceId) {
+      fetchAndSetDocuments(workspaceId)
+    }
+  }, [workspaceId])
 
-  const initializeWorkspaceAndDocuments = async () => {
+  const fetchAndSetDocuments = async (id: string) => {
+    setLoading(true)
     try {
-      // Ensure user has a default workspace
-      const workspace = await WorkspaceService.ensureDefaultWorkspace(userId)
-      if (workspace) {
-        setCurrentWorkspace(workspace)
-        await fetchDocuments(workspace.id)
-      } else {
-        console.error("Failed to create or get default workspace")
-      }
+      const fetchedDocuments = await getDocuments(supabase, id)
+      setDocuments(fetchedDocuments)
     } catch (error) {
-      console.error("Error initializing workspace:", error)
+      console.error("Error fetching documents:", error)
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchDocuments = async (workspaceId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("documents")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("workspace_id", workspaceId)
-        .order("updated_at", { ascending: false })
-
-      if (error) throw error
-      setDocuments(data || [])
-    } catch (error) {
-      console.error("Error fetching documents:", error)
-    }
-  }
-
   const createDocument = async () => {
-    if (!newDocTitle.trim() || !currentWorkspace) return
+    if (!newDocTitle.trim() || !workspaceId) return
 
     setIsCreating(true)
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error("User not authenticated")
+
       const { data, error } = await supabase
         .from("documents")
         .insert({
           title: newDocTitle,
           content: "",
-          user_id: userId,
-          workspace_id: currentWorkspace.id,
-          file_type: "txt", // Default to txt for new documents
+          user_id: user.id,
+          workspace_id: workspaceId,
+          file_type: "txt",
         })
         .select()
         .single()
@@ -117,36 +101,37 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
 
   const uploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !currentWorkspace) return
+    if (!file || !workspaceId) return
 
     setUploadError(null)
     setIsUploading(true)
 
     try {
-      // Check file size (1MB limit)
       const maxSize = 1024 * 1024 // 1MB in bytes
       if (file.size > maxSize) {
-        throw new Error(`File size exceeds 1MB limit. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`)
+        throw new Error(`File size exceeds 1MB. Your file is ${(file.size / (1024 * 1024)).toFixed(2)}MB.`)
       }
 
-      // Check file type
       if (!fileProcessorRegistry.isSupported(file.name)) {
         const supportedTypes = fileProcessorRegistry.getSupportedTypes().join(", ")
         throw new Error(`Unsupported file type. Supported formats: ${supportedTypes}`)
       }
+      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error("User not authenticated")
 
-      // Process file content
       const content = await fileProcessorRegistry.processFile(file)
       const fileType = fileProcessorRegistry.getFileTypeForFile(file.name)
 
-      // Create document with original filename and file type
       const { data, error } = await supabase
         .from("documents")
         .insert({
           title: file.name,
           content: content,
-          user_id: userId,
-          workspace_id: currentWorkspace.id,
+          user_id: user.id,
+          workspace_id: workspaceId,
           file_type: fileType,
         })
         .select()
@@ -157,12 +142,10 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
       setDocuments([data, ...documents])
       onSelectDocument(data)
 
-      // Reset file input
       event.target.value = ""
     } catch (error) {
       console.error("Error uploading file:", error)
       setUploadError(error instanceof Error ? error.message : "Failed to upload file")
-      // Reset file input on error
       event.target.value = ""
     } finally {
       setIsUploading(false)
@@ -171,13 +154,10 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
 
   const handleDownloadDocument = async (document: Document) => {
     try {
-      // Check if this is the currently selected document with unsaved changes
       if (selectedDocument?.id === document.id) {
-        // Auto-save current changes before download
         const currentContent = selectedDocument.content
         await supabase.from("documents").update({ content: currentContent }).eq("id", document.id)
 
-        // Update local document with current content
         document.content = currentContent
       }
 
@@ -221,26 +201,13 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
     )
   }
 
-  if (!currentWorkspace) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center text-red-500">
-            <p>Unable to load workspace. Please try refreshing the page.</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="w-5 h-5" />
-          My Documents ({documents.length})
+          Documents ({documents.length})
         </CardTitle>
-        <p className="text-sm text-gray-500">Workspace: {currentWorkspace.name}</p>
       </CardHeader>
       <CardContent className="p-0">
         <div className="p-4 border-b">
@@ -250,125 +217,93 @@ export function DocumentManager({ userId, onSelectDocument, selectedDocument }: 
                 placeholder="New document title..."
                 value={newDocTitle}
                 onChange={(e) => setNewDocTitle(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && createDocument()}
+                onKeyDown={(e) => e.key === 'Enter' && createDocument()}
+                disabled={isCreating}
               />
               <Button onClick={createDocument} disabled={isCreating || !newDocTitle.trim()}>
-                <Plus className="w-4 h-4" />
+                {isCreating ? 'Creating...' : <Plus className="w-4 h-4" />}
               </Button>
             </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
+            <div>
+              <label htmlFor="file-upload" className="w-full">
+                <Button asChild variant="outline">
+                  <span className="w-full flex items-center justify-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    Upload File
+                  </span>
+                </Button>
+              </label>
+              <Input
                 id="file-upload"
+                type="file"
                 className="hidden"
-                accept=".txt,.md,.markdown"
                 onChange={uploadFile}
                 disabled={isUploading}
+                accept={fileProcessorRegistry.getSupportedTypes().join(",")}
               />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById("file-upload")?.click()}
-                disabled={isUploading}
-                className="w-full"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {isUploading ? "Uploading..." : "Upload File"}
-              </Button>
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBulkDownload}
-              disabled={documents.length === 0}
-              className="w-full"
-            >
-              <Archive className="w-4 h-4 mr-2" />
-              Download All ({documents.length})
-            </Button>
-
+            {isUploading && (
+              <div className="text-sm text-center text-muted-foreground">Uploading...</div>
+            )}
             {uploadError && (
               <Alert variant="destructive">
-                <AlertDescription className="flex items-center justify-between">
-                  <span>{uploadError}</span>
-                  <Button variant="ghost" size="sm" onClick={() => setUploadError(null)} className="h-auto p-1">
-                    <X className="w-4 h-4" />
-                  </Button>
-                </AlertDescription>
+                <X className="h-4 w-4" />
+                <AlertDescription>{uploadError}</AlertDescription>
               </Alert>
             )}
           </div>
         </div>
-        <ScrollArea className="h-[300px]">
-          <div className="p-4 space-y-2">
-            {documents.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p className="font-medium">No documents yet</p>
-                <p className="text-sm">Create your first document to get started</p>
+        <ScrollArea className="h-[400px]">
+          {documents.map((doc) => (
+            <div
+              key={doc.id}
+              className={`flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 ${
+                selectedDocument?.id === doc.id ? "bg-gray-200 dark:bg-gray-700" : ""
+              }`}
+              onClick={() => onSelectDocument(doc)}
+            >
+              <div className="flex items-center gap-3">
+                <FileText className="w-4 h-4 text-gray-500" />
+                <span className="flex-1 truncate">{doc.title}</span>
+                {doc.file_type && (
+                  <Badge variant="secondary" className="text-xs">
+                    {doc.file_type}
+                  </Badge>
+                )}
               </div>
-            ) : (
-              documents.map((document) => (
-                <div
-                  key={document.id}
-                  className={`p-3 border rounded-lg cursor-pointer transition-colors group ${
-                    selectedDocument?.id === document.id
-                      ? "border-green-500 bg-green-50"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                  onClick={() => onSelectDocument(document)}
-                  title={document.document_goal || undefined}
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-7 h-7"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDownloadDocument(doc)
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-sm truncate">{document.title}</h3>
-                      <p className="text-xs text-gray-500 mt-1">{new Date(document.updated_at).toLocaleDateString()}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs">
-                          {document.content.trim().split(/\s+/).length} words
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {document.file_type || "txt"}
-                        </Badge>
-                        {document.document_type && (
-                          <Badge variant="secondary" className="text-xs">
-                            {document.document_type}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDownloadDocument(document)
-                        }}
-                        title="Download document"
-                      >
-                        <Download className="w-4 h-4 text-blue-500" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteDocument(document.id)
-                        }}
-                        title="Delete document"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+                  <Download className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-7 h-7 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/50"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteDocument(doc.id)
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
         </ScrollArea>
+        <div className="p-4 border-t">
+          <Button variant="outline" className="w-full" onClick={handleBulkDownload}>
+            <Download className="w-4 h-4 mr-2" />
+            Download All as .zip
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

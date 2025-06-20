@@ -35,7 +35,11 @@ export class AIService {
     return AIService.instance
   }
 
-  async analyzeDoucment(content: string, documentId: string): Promise<SuggestionResponse> {
+  async analyzeDoucment(
+    content: string,
+    documentId: string,
+    workspaceId: string,
+  ): Promise<SuggestionResponse> {
     // Check if there's already a request in progress for this document
     const existingRequest = this.requestQueue.get(documentId)
     if (existingRequest) {
@@ -56,7 +60,7 @@ export class AIService {
       }
     }
 
-    const analysisPromise = this.performAnalysis(content, documentId)
+    const analysisPromise = this.performAnalysis(content, documentId, workspaceId)
     this.requestQueue.set(documentId, analysisPromise)
 
     try {
@@ -68,7 +72,11 @@ export class AIService {
     }
   }
 
-  private async performAnalysis(content: string, documentId: string): Promise<SuggestionResponse> {
+  private async performAnalysis(
+    content: string,
+    documentId: string,
+    workspaceId: string,
+  ): Promise<SuggestionResponse> {
     try {
       console.log("Starting analysis request for document:", documentId)
 
@@ -106,6 +114,7 @@ export class AIService {
         body: JSON.stringify({
           content,
           documentId,
+          workspaceId,
         }),
       })
 

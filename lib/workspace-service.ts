@@ -1,84 +1,116 @@
-import { supabase } from "./supabase"
-import type { Database } from "./database.types"
+/**
+ * @file This file contains the workspace service, which is responsible
+ * for all database interactions related to workspaces. It provides
+ * functions for creating, reading, and deleting workspaces.
+ */
 
-type Workspace = Database["public"]["Tables"]["workspaces"]["Row"]
-type WorkspaceInsert = Database["public"]["Tables"]["workspaces"]["Insert"]
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from './database.types';
 
-export class WorkspaceService {
-  static async getDefaultWorkspace(userId: string): Promise<Workspace | null> {
-    try {
-      const { data, error } = await supabase
-        .from("workspaces")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("is_default", true)
-        .single()
+/**
+ * Define the Workspace type based on the 'workspaces' table schema.
+ * This provides a clear and type-safe structure for workspace data.
+ */
+export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 
-      if (error) {
-        console.error("Error fetching default workspace:", error)
-        return null
-      }
+/**
+ * Fetches all workspaces associated with a given user.
+ *
+ * @param {SupabaseClient<Database>} client - The Supabase client instance.
+ * @param {string} userId - The ID of the user whose workspaces are to be fetched.
+ * @returns {Promise<Workspace[]>} A promise that resolves to an array of workspaces.
+ * @throws Will throw an error if the database query fails.
+ */
+export async function getWorkspaces(
+  client: SupabaseClient<Database>,
+  userId: string
+): Promise<Workspace[]> {
+  const { data, error } = await client
+    .from('workspaces')
+    .select('*')
+    .eq('user_id', userId);
 
-      return data
-    } catch (error) {
-      console.error("Error in getDefaultWorkspace:", error)
-      return null
-    }
+  if (error) {
+    console.error('Error fetching workspaces:', error);
+    throw new Error('Could not fetch workspaces.');
   }
 
-  static async createDefaultWorkspace(userId: string): Promise<Workspace | null> {
-    try {
-      const workspaceData: WorkspaceInsert = {
-        name: "My Workspace",
-        description: "Default workspace",
-        user_id: userId,
-        is_default: true,
-      }
+  return data || [];
+}
 
-      const { data, error } = await supabase.from("workspaces").insert(workspaceData).select().single()
+/**
+ * Creates a new workspace for a specified user.
+ *
+ * @param {SupabaseClient<Database>} client - The Supabase client instance.
+ * @param {{ name: string; userId: string }} params - The parameters for creating a workspace.
+ * @returns {Promise<Workspace>} A promise that resolves to the newly created workspace.
+ * @throws Will throw an error if the workspace creation fails.
+ */
+export async function createWorkspace(
+  client: SupabaseClient<Database>,
+  params: { name: string; userId: string }
+): Promise<Workspace> {
+  const { data, error } = await client
+    .from('workspaces')
+    .insert({ name: params.name, user_id: params.userId })
+    .select()
+    .single();
 
-      if (error) {
-        console.error("Error creating default workspace:", error)
-        return null
-      }
-
-      return data
-    } catch (error) {
-      console.error("Error in createDefaultWorkspace:", error)
-      return null
-    }
+  if (error) {
+    console.error('Error creating workspace:', error);
+    throw new Error('Could not create workspace.');
   }
 
-  static async ensureDefaultWorkspace(userId: string): Promise<Workspace | null> {
-    // First try to get existing default workspace
-    let workspace = await this.getDefaultWorkspace(userId)
+  return data;
+}
 
-    // If no default workspace exists, create one
-    if (!workspace) {
-      workspace = await this.createDefaultWorkspace(userId)
-    }
+/**
+ * Deletes a specified workspace.
+ *
+ * @param {SupabaseClient<Database>} client - The Supabase client instance.
+ * @param {{ workspaceId: string; userId: string }} params - The workspace ID and user ID for validation.
+ * @returns {Promise<void>} A promise that resolves when the workspace is deleted.
+ * @throws Will throw an error if the deletion fails.
+ */
+export async function deleteWorkspace(
+  client: SupabaseClient<Database>,
+  params: { workspaceId: string; userId: string }
+): Promise<void> {
+  const { error } = await client
+    .from('workspaces')
+    .delete()
+    .eq('id', params.workspaceId)
+    .eq('user_id', params.userId); // Ensure user owns the workspace
 
-    return workspace
+  if (error) {
+    console.error('Error deleting workspace:', error);
+    throw new Error('Could not delete workspace.');
+  }
+}
+
+/**
+ * Fetches a single workspace by its ID, ensuring it belongs to the user.
+ *
+ * @param {SupabaseClient<Database>} client - The Supabase client instance.
+ * @param {{ workspaceId: string; userId: string }} params - The workspace ID and user ID.
+ * @returns {Promise<Workspace>} A promise that resolves to the requested workspace.
+ * @throws Will throw an error if the workspace is not found or the query fails.
+ */
+export async function getWorkspace(
+  client: SupabaseClient<Database>,
+  params: { workspaceId: string; userId: string }
+): Promise<Workspace> {
+  const { data, error } = await client
+    .from('workspaces')
+    .select('*')
+    .eq('id', params.workspaceId)
+    .eq('user_id', params.userId)
+    .single();
+
+  if (error || !data) {
+    console.error('Error fetching workspace:', error);
+    throw new Error('Could not fetch workspace.');
   }
 
-  static async getAllWorkspaces(userId: string): Promise<Workspace[]> {
-    try {
-      const { data, error } = await supabase
-        .from("workspaces")
-        .select("*")
-        .eq("user_id", userId)
-        .order("is_default", { ascending: false })
-        .order("updated_at", { ascending: false })
-
-      if (error) {
-        console.error("Error fetching workspaces:", error)
-        return []
-      }
-
-      return data || []
-    } catch (error) {
-      console.error("Error in getAllWorkspaces:", error)
-      return []
-    }
-  }
+  return data;
 }

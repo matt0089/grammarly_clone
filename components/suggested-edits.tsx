@@ -14,11 +14,18 @@ import { getSuggestionIcon, getSuggestionColor } from "@/lib/suggestion-types"
 interface SuggestedEditsProps {
   content: string
   documentId: string | null
+  workspaceId: string
   onApplySuggestion: (suggestion: DocumentSuggestion) => void
   isEnabled: boolean
 }
 
-export function SuggestedEdits({ content, documentId, onApplySuggestion, isEnabled }: SuggestedEditsProps) {
+export function SuggestedEdits({
+  content,
+  documentId,
+  workspaceId,
+  onApplySuggestion,
+  isEnabled,
+}: SuggestedEditsProps) {
   const [suggestions, setSuggestions] = useState<DocumentSuggestion[]>([])
   const [summary, setSummary] = useState<SuggestionResponse["summary"] | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -27,7 +34,7 @@ export function SuggestedEdits({ content, documentId, onApplySuggestion, isEnabl
   const [error, setError] = useState<string | null>(null)
 
   const analyzeContent = useCallback(async () => {
-    if (!isEnabled || !documentId || content.trim().length < 50) {
+    if (!isEnabled || !documentId || !workspaceId || content.trim().length < 50) {
       setSuggestions([])
       setSummary(null)
       return
@@ -42,7 +49,7 @@ export function SuggestedEdits({ content, documentId, onApplySuggestion, isEnabl
     setError(null)
 
     try {
-      const response = await aiService.analyzeDoucment(content, documentId)
+      const response = await aiService.analyzeDoucment(content, documentId, workspaceId)
       setSuggestions(response.suggestions)
       setSummary(response.summary)
       setLastAnalyzedContent(content)
@@ -53,7 +60,7 @@ export function SuggestedEdits({ content, documentId, onApplySuggestion, isEnabl
     } finally {
       setIsAnalyzing(false)
     }
-  }, [content, documentId, isEnabled, lastAnalyzedContent])
+  }, [content, documentId, workspaceId, isEnabled, lastAnalyzedContent])
 
   // Auto-analyze when content changes (with debouncing)
   useEffect(() => {
