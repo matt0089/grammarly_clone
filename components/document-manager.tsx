@@ -19,7 +19,7 @@ type Document = Database["public"]["Tables"]["documents"]["Row"]
 
 interface DocumentManagerProps {
   userId: string
-  workspaceId?: string
+  workspaceId: string
   onSelectDocument: (document: Document | null) => void
   selectedDocument: Document | null
 }
@@ -38,14 +38,12 @@ export function DocumentManager({ userId, workspaceId, onSelectDocument, selecte
 
   const fetchDocuments = async () => {
     try {
-      let query = supabase.from("documents").select("*").eq("user_id", userId)
-
-      // Only filter by workspace_id if it's provided
-      if (workspaceId) {
-        query = query.eq("workspace_id", workspaceId)
-      }
-
-      const { data, error } = await query.order("updated_at", { ascending: false })
+      const { data, error } = await supabase
+        .from("documents")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("workspace_id", workspaceId)
+        .order("updated_at", { ascending: false })
 
       if (error) throw error
       setDocuments(data || [])
@@ -61,19 +59,17 @@ export function DocumentManager({ userId, workspaceId, onSelectDocument, selecte
 
     setIsCreating(true)
     try {
-      const documentData: any = {
-        title: newDocTitle,
-        content: "",
-        user_id: userId,
-        file_type: "txt", // Default to txt for new documents
-      }
-
-      // Only add workspace_id if it's provided
-      if (workspaceId) {
-        documentData.workspace_id = workspaceId
-      }
-
-      const { data, error } = await supabase.from("documents").insert(documentData).select().single()
+      const { data, error } = await supabase
+        .from("documents")
+        .insert({
+          title: newDocTitle,
+          content: "",
+          user_id: userId,
+          workspace_id: workspaceId,
+          file_type: "txt", // Default to txt for new documents
+        })
+        .select()
+        .single()
 
       if (error) throw error
 
@@ -126,20 +122,18 @@ export function DocumentManager({ userId, workspaceId, onSelectDocument, selecte
       const content = await fileProcessorRegistry.processFile(file)
       const fileType = fileProcessorRegistry.getFileTypeForFile(file.name)
 
-      const documentData: any = {
-        title: file.name,
-        content: content,
-        user_id: userId,
-        file_type: fileType,
-      }
-
-      // Only add workspace_id if it's provided
-      if (workspaceId) {
-        documentData.workspace_id = workspaceId
-      }
-
       // Create document with original filename and file type
-      const { data, error } = await supabase.from("documents").insert(documentData).select().single()
+      const { data, error } = await supabase
+        .from("documents")
+        .insert({
+          title: file.name,
+          content: content,
+          user_id: userId,
+          workspace_id: workspaceId,
+          file_type: fileType,
+        })
+        .select()
+        .single()
 
       if (error) throw error
 

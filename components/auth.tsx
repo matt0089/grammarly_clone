@@ -13,10 +13,10 @@ import { User, Mail, Lock, UserPlus } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 
 interface AuthProps {
-  onAuthSuccess: (user: SupabaseUser | null) => void
+  onAuthChange: (user: SupabaseUser | null) => void
 }
 
-export function Auth({ onAuthSuccess }: AuthProps) {
+export function Auth({ onAuthChange }: AuthProps) {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -25,38 +25,27 @@ export function Auth({ onAuthSuccess }: AuthProps) {
 
   useEffect(() => {
     // Check current session
-    const checkSession = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (session?.user) {
-          onAuthSuccess(session.user)
-        }
-      } catch (error) {
-        console.error("Error checking session:", error)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        // Redirect to dashboard instead of calling onAuthChange immediately
+        window.location.href = "/"
       }
-    }
-
-    checkSession()
+    })
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (event === "SIGNED_IN" && session?.user) {
-          onAuthSuccess(session.user)
-        } else if (event === "SIGNED_OUT") {
-          onAuthSuccess(null)
-        }
-      } catch (error) {
-        console.error("Error handling auth state change:", error)
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        // Redirect to dashboard on sign in
+        window.location.href = "/"
+      } else {
+        onAuthChange(session?.user ?? null)
       }
     })
 
     return () => subscription.unsubscribe()
-  }, [onAuthSuccess])
+  }, [onAuthChange])
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()

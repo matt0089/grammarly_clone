@@ -4,12 +4,12 @@ CREATE TABLE IF NOT EXISTS workspaces (
   name TEXT NOT NULL,
   description TEXT,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  is_default BOOLEAN DEFAULT false,
+  is_default BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Add workspace_id to documents table
+-- Add workspace_id to documents table (nullable initially for migration)
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE;
 
 -- Enable RLS on workspaces
@@ -28,41 +28,6 @@ CREATE POLICY "Users can update own workspaces" ON workspaces
 CREATE POLICY "Users can delete own workspaces" ON workspaces
   FOR DELETE USING (auth.uid() = user_id);
 
--- Update documents RLS to include workspace check
-DROP POLICY IF EXISTS "Users can view own documents" ON documents;
-DROP POLICY IF EXISTS "Users can create own documents" ON documents;
-DROP POLICY IF EXISTS "Users can update own documents" ON documents;
-DROP POLICY IF EXISTS "Users can delete own documents" ON documents;
-
-CREATE POLICY "Users can view own documents" ON documents
-  FOR SELECT USING (
-    auth.uid() = user_id AND 
-    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
-  );
-
-CREATE POLICY "Users can create own documents" ON documents
-  FOR INSERT WITH CHECK (
-    auth.uid() = user_id AND 
-    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
-  );
-
-CREATE POLICY "Users can update own documents" ON documents
-  FOR UPDATE USING (
-    auth.uid() = user_id AND 
-    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
-  );
-
-CREATE POLICY "Users can delete own documents" ON documents
-  FOR DELETE USING (
-    auth.uid() = user_id AND 
-    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
-  );
-
--- Add trigger for workspaces updated_at
-CREATE TRIGGER update_workspaces_updated_at
-  BEFORE UPDATE ON workspaces
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- Function to create default workspace for new users
 CREATE OR REPLACE FUNCTION create_default_workspace_for_user(user_id UUID)
 RETURNS UUID
@@ -73,7 +38,7 @@ DECLARE
   workspace_id UUID;
 BEGIN
   INSERT INTO workspaces (name, description, user_id, is_default)
-  VALUES ('My Documents', 'Default workspace for your documents', user_id, true)
+  VALUES ('My Workspace', 'Default workspace for your documents', user_id, TRUE)
   RETURNING id INTO workspace_id;
   
   RETURN workspace_id;
@@ -108,3 +73,69 @@ EXCEPTION
     RETURN NEW;
 END;
 $$;
+
+-- Add trigger for workspace updated_at
+CREATE TRIGGER update_workspaces_updated_at
+  BEFORE UPDATE ON workspaces
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create default workspaces for existing users
+DO $$
+DECLARE
+  user_record RECORD;
+  workspace_id UUID;
+BEGIN
+  FOR user_record IN SELECT id FROM profiles LOOP
+    -- Check if user already has a default workspace
+    SELECT id INTO workspace_id FROM workspaces 
+    WHERE user_id = user_record.id AND is_default = TRUE;
+    
+    -- If no default workspace exists, create one
+    IF workspace_id IS NULL THEN
+      workspace_id := create_default_workspace_for_user(user_record.id);
+      
+      -- Update all existing documents for this user to belong to the default workspace
+      UPDATE documents 
+      SET workspace_id = workspace_id 
+      WHERE user_id = user_record.id AND workspace_id IS NULL;
+    END IF;
+  END LOOP;
+END $$;
+
+-- Make workspace_id NOT NULL after migration
+ALTER TABLE documents ALTER COLUMN workspace_id SET NOT NULL;
+
+-- Update documents RLS policies to include workspace verification
+DROP POLICY IF EXISTS "Users can view own documents" ON documents;
+DROP POLICY IF EXISTS "Users can create own documents" ON documents;
+DROP POLICY IF EXISTS "Users can update own documents" ON documents;
+DROP POLICY IF EXISTS "Users can delete own documents" ON documents;
+
+CREATE POLICY "Users can view documents in own workspaces" ON documents
+  FOR SELECT USING (
+    auth.uid() = user_id AND 
+    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Users can create documents in own workspaces" ON documents
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id AND 
+    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Users can update documents in own workspaces" ON documents
+  FOR UPDATE USING (
+    auth.uid() = user_id AND 
+    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Users can delete documents in own workspaces" ON documents
+  FOR DELETE USING (
+    auth.uid() = user_id AND 
+    workspace_id IN (SELECT id FROM workspaces WHERE user_id = auth.uid())
+  );
+
+-- Add indexes for performance
+CREATE INDEX IF NOT EXISTS idx_workspaces_user_id ON workspaces(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_workspace_id ON documents(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_user_default ON workspaces(user_id, is_default);
