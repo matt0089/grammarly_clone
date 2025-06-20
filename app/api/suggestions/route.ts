@@ -23,10 +23,25 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Suggestions API error:", error)
 
+    // More detailed error logging
+    if (error instanceof Error) {
+      console.error("Error name:", error.name)
+      console.error("Error message:", error.message)
+
+      // Log raw AI response if available
+      if ("text" in error) {
+        console.error("Raw AI response that failed parsing:", (error as any).text)
+      }
+    }
+
     return NextResponse.json(
       {
         error: "Failed to generate suggestions",
         details: error instanceof Error ? error.message : "Unknown error",
+        // In development, include more details
+        ...(process.env.NODE_ENV === "development" && {
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
       },
       { status: 500 },
     )

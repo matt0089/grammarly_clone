@@ -59,12 +59,19 @@ export class AISuggestionService {
         model: this.model,
         schema: SuggestionSchema,
         prompt,
-        temperature: 0.3,
+        temperature: 0.1, // Lower temperature for more consistent JSON
+        maxRetries: 2, // Add retries for failed attempts
       })
 
       return this.transformToSuggestions(result.object.suggestions, chunk)
     } catch (error) {
       console.error("Failed to process chunk:", error)
+
+      // Log the raw response for debugging
+      if (error instanceof Error && "text" in error) {
+        console.error("Raw AI response:", (error as any).text)
+      }
+
       return []
     }
   }
@@ -72,28 +79,38 @@ export class AISuggestionService {
   private buildPrompt(text: string, context?: string): string {
     return `You are an expert writing assistant. Analyze the following text for writing improvements and provide specific, actionable suggestions.
 
-Consider these aspects:
-- Grammar and spelling errors (mark as "error" severity)
-- Style and clarity issues (mark as "warning" or "suggestion" severity)
-- Conciseness opportunities
-- Active voice recommendations
-- Word choice improvements
-- Sentence structure optimization
+IMPORTANT: You must respond with valid JSON that exactly matches this structure:
 
-Guidelines:
-- Focus on the most impactful improvements first
-- Provide exact text positions (character indices)
-- Give clear explanations for each suggestion
-- Suggest specific replacements
-- Rate your confidence (0.0 to 1.0)
-- Provide contextual reasoning when helpful
+{
+  "suggestions": [
+    {
+      "type": "grammar" | "spelling" | "style" | "clarity" | "conciseness" | "active-voice" | "word-choice" | "sentence-structure",
+      "severity": "error" | "warning" | "suggestion",
+      "originalText": "exact text from input",
+      "suggestedText": "your suggested replacement",
+      "explanation": "clear explanation of why this change improves the text",
+      "startIndex": 0,
+      "endIndex": 10,
+      "confidence": 0.9,
+      "contextualReason": "optional additional context",
+      "alternativeOptions": ["optional", "alternative", "suggestions"]
+    }
+  ]
+}
 
-${context ? `Context: ${context}` : ""}
+Rules:
+- Use exact character positions (startIndex/endIndex) within the analyzed text
+- Confidence must be a number between 0.0 and 1.0
+- All string fields must use proper JSON syntax with colons (:) not equals (=)
+- Focus on the most impactful improvements
+- Provide clear, actionable explanations
+
+${context ? `Document Context: ${context}` : ""}
 
 Text to analyze:
 "${text}"
 
-Provide suggestions in the specified JSON format. Only suggest changes that genuinely improve the writing.`
+Respond with valid JSON only:`
   }
 
   private transformToSuggestions(
