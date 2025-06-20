@@ -86,11 +86,14 @@ export default function GrammarlyClone() {
       if (session?.user) {
         // User is logged in, redirect to dashboard
         router.push("/dashboard")
-      } else {
-        setLoading(false)
+        return
       }
+
+      setUser(null)
     } catch (error) {
       console.error("Error checking user:", error)
+      setUser(null)
+    } finally {
       setLoading(false)
     }
   }
@@ -100,6 +103,12 @@ export default function GrammarlyClone() {
     setUser(null)
     setSelectedDocument(null)
     setText("")
+  }
+
+  const handleAuthSuccess = (user: SupabaseUser) => {
+    setUser(user)
+    // Redirect to dashboard after successful authentication
+    router.push("/dashboard")
   }
 
   useEffect(() => {
@@ -135,7 +144,7 @@ export default function GrammarlyClone() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center mx-auto mb-4">
-            <div className="w-5 h-5 bg-white rounded-sm" />
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </div>
           <p className="text-gray-600">Loading...</p>
         </div>
@@ -144,7 +153,7 @@ export default function GrammarlyClone() {
   }
 
   if (!user) {
-    return <Auth onAuthChange={setUser} />
+    return <Auth onAuthSuccess={handleAuthSuccess} />
   }
 
   return (
