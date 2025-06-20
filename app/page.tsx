@@ -7,7 +7,8 @@ import { DocumentManager } from "@/components/document-manager"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { FileText, Settings, LogOut, Save, Clock, BarChart3 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { FileText, Settings, LogOut, Save, Clock, BarChart3, PanelLeft } from "lucide-react"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { calculateFleschReadingEase, type ReadabilityResult } from "@/lib/readability"
@@ -24,6 +25,12 @@ export default function GrammarlyClone() {
   const [readabilityScore, setReadabilityScore] = useState<ReadabilityResult | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout>()
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed)
+  }
 
   const saveDocument = async (content: string) => {
     if (!selectedDocument || !user) return
@@ -106,6 +113,15 @@ export default function GrammarlyClone() {
               <FileText className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-xl font-semibold text-gray-900">DocWise AI</h1>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleSidebar}
+              className="ml-2"
+              title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <PanelLeft className={`w-4 h-4 transition-transform ${isSidebarCollapsed ? "rotate-180" : ""}`} />
+            </Button>
             {selectedDocument && (
               <div className="flex items-center gap-2 ml-4">
                 <span className="text-sm text-gray-500">•</span>
@@ -119,6 +135,54 @@ export default function GrammarlyClone() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">Welcome, {user.email}</span>
+
+            {/* Analytics Modal Button */}
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Analytics
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5" />
+                    Writing Analytics
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <ReadabilityDisplay result={readabilityScore} wordCount={stats.words} />
+
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Words</span>
+                      <span className="font-medium">{stats.words}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Characters</span>
+                      <span className="font-medium">{stats.characters}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Sentences</span>
+                      <span className="font-medium">{stats.sentences}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Paragraphs</span>
+                      <span className="font-medium">{stats.paragraphs}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Reading Time
+                      </span>
+                      <span className="font-medium">{stats.readingTime} min</span>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             <Button variant="ghost" size="sm">
               <Settings className="w-4 h-4 mr-2" />
               Settings
@@ -132,18 +196,24 @@ export default function GrammarlyClone() {
       </header>
 
       <div className="max-w-7xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div
+          className={`grid grid-cols-1 gap-6 transition-all duration-300 ${
+            isSidebarCollapsed ? "lg:grid-cols-2" : "lg:grid-cols-3"
+          }`}
+        >
           {/* Document Manager Sidebar */}
-          <div className="lg:col-span-1">
-            <DocumentManager
-              userId={user.id}
-              onSelectDocument={setSelectedDocument}
-              selectedDocument={selectedDocument}
-            />
-          </div>
+          {!isSidebarCollapsed && (
+            <div className="lg:col-span-1">
+              <DocumentManager
+                userId={user.id}
+                onSelectDocument={setSelectedDocument}
+                selectedDocument={selectedDocument}
+              />
+            </div>
+          )}
 
           {/* Main Editor */}
-          <div className="lg:col-span-2">
+          <div className={`${isSidebarCollapsed ? "lg:col-span-1" : "lg:col-span-2"}`}>
             <Card className="h-[600px]">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
@@ -178,54 +248,14 @@ export default function GrammarlyClone() {
             </Card>
           </div>
 
-          {/* Enhanced Stats Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Writing Analytics Card */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Writing Analytics
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ReadabilityDisplay result={readabilityScore} wordCount={stats.words} />
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Words</span>
-                    <span className="font-medium">{stats.words}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Characters</span>
-                    <span className="font-medium">{stats.characters}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Sentences</span>
-                    <span className="font-medium">{stats.sentences}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Paragraphs</span>
-                    <span className="font-medium">{stats.paragraphs}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      Reading Time
-                    </span>
-                    <span className="font-medium">{stats.readingTime} min</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Writing Tips Card */}
+          {/* Writing Tips Card */}
+          <div className="lg:col-span-1">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Writing Tips</CardTitle>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[200px]">
+                <ScrollArea className="h-[520px]">
                   <div className="space-y-3 pr-4">
                     <div className="p-3 bg-blue-50 rounded-lg">
                       <h4 className="font-medium text-sm text-blue-900 mb-1">Keep it Simple</h4>
@@ -249,6 +279,18 @@ export default function GrammarlyClone() {
                       <h4 className="font-medium text-sm text-orange-900 mb-1">Show, Don't Tell</h4>
                       <p className="text-xs text-orange-700">
                         Use specific examples and details to illustrate your points.
+                      </p>
+                    </div>
+                    <div className="p-3 bg-red-50 rounded-lg">
+                      <h4 className="font-medium text-sm text-red-900 mb-1">Edit Ruthlessly</h4>
+                      <p className="text-xs text-red-700">
+                        Remove unnecessary words and phrases to make your writing more impactful.
+                      </p>
+                    </div>
+                    <div className="p-3 bg-yellow-50 rounded-lg">
+                      <h4 className="font-medium text-sm text-yellow-900 mb-1">Read Aloud</h4>
+                      <p className="text-xs text-yellow-700">
+                        Reading your work aloud helps identify awkward phrasing and flow issues.
                       </p>
                     </div>
                   </div>
