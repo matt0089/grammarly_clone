@@ -26,15 +26,9 @@ export async function generateFunctionDocumentationStream(
   documentGoal: string | null,
 ): Promise<ReadableStream<string>> {
   const prompt = `
-    Based on the following code, what does the function "${functionName}" do? 
-    Please provide the answer in the form of a complete ${docFormat} block.
-    
-    The documentation will be part of a larger document with the following properties:
-    - Document Type: ${documentType}
-    - Document Goal: ${documentGoal || 'Not specified'}
+    what does the function ${functionName} do, based on the code listing below?  Please answer as ${documentType || 'generic documentation'} for the function.  The description should have a tone and style in line with the document's goal: ${documentGoal || 'to be general purpose documentation'}
 
-    Use this context to tailor the tone and level of detail in the documentation.
-    Do not include any other text or explanation, only the documentation block itself.
+    Output the documentation only, no other text.
 
     \`\`\`
     ${fileContent}
@@ -42,7 +36,7 @@ export async function generateFunctionDocumentationStream(
   `;
 
   const { textStream } = await streamText({
-    model: openai('gpt-4-turbo'),
+    model: openai('chatgpt-4o-latest'),
     prompt,
   });
 
