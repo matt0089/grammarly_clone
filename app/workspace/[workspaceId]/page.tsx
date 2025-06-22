@@ -22,6 +22,7 @@ import { calculateFleschReadingEase, type ReadabilityResult } from '@/lib/readab
 import { type DocumentSuggestion } from '@/lib/ai-service';
 import { LogOut, FileText, Info, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { type RealtimeChannel } from '@supabase/supabase-js';
 
 type Document = Database['public']['Tables']['documents']['Row'];
 type Workspace = Database['public']['Tables']['workspaces']['Row'];
@@ -76,21 +77,42 @@ export default function WorkspacePage() {
     fetchWorkspace();
 
     // Set up a real-time subscription
-    const channel = supabase
-      .channel(`workspace-${workspaceId}`)
-      .on<Workspace>(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'workspaces', filter: `id=eq.${workspaceId}` },
-        (payload) => {
-          setWorkspace(payload.new as Workspace);
-          if (payload.new.indexing_status === 'COMPLETED') {
-            toast.success('Repository indexing complete!');
-          } else if (payload.new.indexing_status === 'FAILED') {
-            toast.error('Repository indexing failed.');
+    const channel = supabase.channel(`workspace-${workspaceId}`);
+
+    const handleUpdate = (payload: any) => {
+      setWorkspace(payload.new as Workspace);
+      if (payload.new.indexing_status === 'COMPLETED') {
+        toast.success('Repository indexing complete!');
+      } else if (payload.new.indexing_status === 'FAILED') {
+        toast.error('Repository indexing failed.');
+      }
+    };
+
+    const subscribeToChanges = async () => {
+      // Ensure the auth session is loaded before subscribing
+      await supabase.auth.getSession();
+      
+      // Prevent subscribing multiple times, which can happen in React Strict Mode
+      if (channel.state !== 'closed') {
+        return;
+      }
+
+      channel
+        .on<Workspace>(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'workspaces', filter: `id=eq.${workspaceId}` },
+          handleUpdate
+        )
+        .subscribe((status, err) => {
+          if (status === 'CHANNEL_ERROR') {
+            const error = err as any;
+            console.error('Realtime channel error:', error);
+            toast.error(`Realtime error: ${error?.message || 'Connection failed'}`);
           }
-        }
-      )
-      .subscribe();
+        });
+    };
+
+    subscribeToChanges();
 
     return () => {
       supabase.removeChannel(channel);
