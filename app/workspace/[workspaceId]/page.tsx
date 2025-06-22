@@ -33,6 +33,7 @@ type Workspace = Database['public']['Tables']['workspaces']['Row'];
  * @returns {React.ReactNode} The rendered editor page.
  */
 export default function WorkspacePage() {
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [documentContent, setDocumentContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -40,10 +41,18 @@ export default function WorkspacePage() {
   const [readabilityResult, setReadabilityResult] = useState<ReadabilityResult | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [selectedText, setSelectedText] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const params = useParams();
   const workspaceId = params.workspaceId as string;
   const supabase = createClient();
+
+  useEffect(() => {
+    if (workspaceId) {
+      fetchAndSetDocuments(workspaceId)
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -88,6 +97,22 @@ export default function WorkspacePage() {
     };
 
   }, [workspaceId, supabase]);
+
+  const fetchAndSetDocuments = async (id: string) => {
+    try {
+      const { data: fetchedDocuments, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('workspace_id', id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setDocuments(fetchedDocuments || []);
+    } catch (error) {
+      console.error("Error fetching documents:", error)
+      toast.error("Failed to load documents.");
+    }
+  }
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -138,6 +163,40 @@ export default function WorkspacePage() {
     setIsSaving(false);
   };
   
+  const handleUpdateTitle = async () => {
+    setIsEditingTitle(false);
+    if (!selectedDocument || !newTitle.trim() || newTitle.trim() === selectedDocument.title) {
+      if (selectedDocument) setNewTitle(selectedDocument.title);
+      return;
+    }
+
+    const trimmedTitle = newTitle.trim();
+    const oldTitle = selectedDocument.title;
+
+    const updatedDocuments = documents.map((doc) => 
+      doc.id === selectedDocument.id ? { ...doc, title: trimmedTitle } : doc
+    );
+    setDocuments(updatedDocuments);
+    setSelectedDocument({ ...selectedDocument, title: trimmedTitle });
+
+    const { error } = await supabase
+      .from('documents')
+      .update({ title: trimmedTitle })
+      .eq('id', selectedDocument.id);
+
+    if (error) {
+      toast.error('Failed to update title.');
+      console.error('Error updating title:', error);
+      const revertedDocuments = documents.map((doc) =>
+        doc.id === selectedDocument.id ? { ...doc, title: oldTitle } : doc
+      );
+      setDocuments(revertedDocuments);
+      setSelectedDocument({ ...selectedDocument, title: oldTitle });
+    } else {
+      toast.success('Title updated successfully!');
+    }
+  };
+
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setDocumentContent(e.target.value);
   };
@@ -274,6 +333,8 @@ export default function WorkspacePage() {
             workspaceId={workspaceId}
             onSelectDocument={handleSelectDocument}
             selectedDocument={selectedDocument}
+            documents={documents}
+            setDocuments={setDocuments}
           />
         </div>
 
@@ -282,7 +343,33 @@ export default function WorkspacePage() {
           {selectedDocument ? (
             <>
               <div className="flex justify-between items-center mb-4">
-                <h1 className="text-2xl font-bold">{selectedDocument.title}</h1>
+                {isEditingTitle ? (
+                  <input
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    onBlur={handleUpdateTitle}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleUpdateTitle();
+                      if (e.key === 'Escape') {
+                        setIsEditingTitle(false);
+                        setNewTitle(selectedDocument.title);
+                      }
+                    }}
+                    className="text-2xl font-bold bg-transparent border-b-2 border-gray-300 focus:outline-none focus:border-primary w-full"
+                    autoFocus
+                  />
+                ) : (
+                  <h1
+                    className="text-2xl font-bold cursor-pointer"
+                    onClick={() => {
+                      if (!selectedDocument) return;
+                      setNewTitle(selectedDocument.title);
+                      setIsEditingTitle(true);
+                    }}
+                  >
+                    {selectedDocument.title}
+                  </h1>
+                )}
                 <div className="flex items-center gap-2">
                   <DocumentMetadataModal document={selectedDocument} onMetadataUpdate={handleMetadataUpdate} />
                   <Button onClick={handleGenerateDocs} disabled={!selectedText || isGeneratingDocs}>

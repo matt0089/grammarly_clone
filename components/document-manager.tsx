@@ -22,33 +22,16 @@ interface DocumentManagerProps {
   workspaceId: string
   onSelectDocument: (document: Document | null) => void
   selectedDocument: Document | null
+  documents: Document[]
+  setDocuments: React.Dispatch<React.SetStateAction<Document[]>>
 }
 
-export function DocumentManager({ workspaceId, onSelectDocument, selectedDocument }: DocumentManagerProps) {
-  const [documents, setDocuments] = useState<Document[]>([])
-  const [loading, setLoading] = useState(true)
+export function DocumentManager({ workspaceId, onSelectDocument, selectedDocument, documents, setDocuments }: DocumentManagerProps) {
+  const [loading, setLoading] = useState(false)
   const [newDocTitle, setNewDocTitle] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-
-  useEffect(() => {
-    if (workspaceId) {
-      fetchAndSetDocuments(workspaceId)
-    }
-  }, [workspaceId])
-
-  const fetchAndSetDocuments = async (id: string) => {
-    setLoading(true)
-    try {
-      const fetchedDocuments = await getDocuments(supabase, id)
-      setDocuments(fetchedDocuments)
-    } catch (error) {
-      console.error("Error fetching documents:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const createDocument = async () => {
     if (!newDocTitle.trim() || !workspaceId) return
