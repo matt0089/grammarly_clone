@@ -275,9 +275,13 @@ export default function WorkspacePage() {
         }),
       });
 
-      if (!response.ok || !response.body) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate documentation.');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.details || errorData.error || 'Failed to generate documentation.');
+      }
+
+      if (!response.body) {
+        throw new Error('Response from server was empty.');
       }
 
       const reader = response.body.getReader();
@@ -303,7 +307,7 @@ export default function WorkspacePage() {
     } catch (error) {
       console.error('Error generating documentation:', error);
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-      toast.error(`Failed to generate docs: ${errorMessage}`);
+      toast.error(errorMessage);
     } finally {
       setIsGeneratingDocs(false);
     }
