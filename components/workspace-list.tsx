@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Workspace } from '@/lib/workspace-service';
@@ -49,6 +49,10 @@ interface WorkspaceListProps {
 export default function WorkspaceList({ initialWorkspaces }: WorkspaceListProps) {
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
+
+  useEffect(() => {
+    setWorkspaces(initialWorkspaces);
+  }, [initialWorkspaces]);
 
   /**
    * Handles the deletion of a workspace.
