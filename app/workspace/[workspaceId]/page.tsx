@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import type { Database } from '@/lib/database.types';
 import { calculateFleschReadingEase, type ReadabilityResult } from '@/lib/readability';
 import { type DocumentSuggestion } from '@/lib/ai-service';
-import { Settings, LogOut, FileText, Info } from 'lucide-react';
+import { LogOut, FileText, Info, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 type Document = Database['public']['Tables']['documents']['Row'];
@@ -256,8 +256,8 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-4">
           <Link href="/dashboard" passHref>
             <Button variant="ghost" size="sm">
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Dashboard
             </Button>
           </Link>
           <Button variant="ghost" size="sm" onClick={handleSignOut}>
@@ -285,10 +285,6 @@ export default function WorkspacePage() {
                 <h1 className="text-2xl font-bold">{selectedDocument.title}</h1>
                 <div className="flex items-center gap-2">
                   <DocumentMetadataModal document={selectedDocument} onMetadataUpdate={handleMetadataUpdate} />
-                  <Button variant="outline" size="sm">
-                    <Info className="w-4 h-4 mr-2" />
-                    Doc Info
-                  </Button>
                   <Button onClick={handleGenerateDocs} disabled={!selectedText || isGeneratingDocs}>
                     {isGeneratingDocs ? 'Generating...' : 'Generate Docs'}
                   </Button>
