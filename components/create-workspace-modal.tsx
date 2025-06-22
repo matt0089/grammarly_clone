@@ -7,6 +7,16 @@
 'use client';
 
 import React, { useState } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -33,26 +43,18 @@ export default function CreateWorkspaceModal() {
   const [gitCommitSha, setGitCommitSha] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConfirmationVisible, setConfirmationVisible] = useState(false);
   const router = useRouter();
 
   const isGithubPartiallyFilled =
     (githubRepoUrl && !gitCommitSha) || (!githubRepoUrl && gitCommitSha);
 
+  const isGithubInfoBeingAdded = githubRepoUrl && gitCommitSha;
+
   /**
-   * Handles the form submission to create a new workspace.
+   * Handles the actual creation of the workspace by calling the API.
    */
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!name.trim()) {
-      setError('Workspace name cannot be empty.');
-      return;
-    }
-    if (isGithubPartiallyFilled) {
-      setError(
-        'Please provide both a GitHub repository URL and a commit SHA, or neither.'
-      );
-      return;
-    }
+  async function proceedWithCreate() {
     setIsLoading(true);
     setError(null);
 
@@ -77,82 +79,131 @@ export default function CreateWorkspaceModal() {
       // Close the modal and refresh the page to show the new workspace
       setOpen(false);
       router.refresh();
-
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      setError(
+        err instanceof Error ? err.message : 'An unknown error occurred.'
+      );
     } finally {
       setIsLoading(false);
+      setConfirmationVisible(false);
+    }
+  }
+
+  /**
+   * Handles the form submission to create a new workspace.
+   */
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim()) {
+      setError('Workspace name cannot be empty.');
+      return;
+    }
+    if (isGithubPartiallyFilled) {
+      setError(
+        'Please provide both a GitHub repository URL and a commit SHA, or neither.'
+      );
+      return;
+    }
+
+    if (isGithubInfoBeingAdded) {
+      setConfirmationVisible(true);
+    } else {
+      await proceedWithCreate();
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Create Workspace</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Create New Workspace</DialogTitle>
-            <DialogDescription>
-              Give your new workspace a name. Click save when you're done.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name" className="text-right">
-                Name
-              </Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="col-span-3"
-                placeholder="My Awesome Project"
-                required
-              />
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button>Create Workspace</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleSubmit}>
+            <DialogHeader>
+              <DialogTitle>Create New Workspace</DialogTitle>
+              <DialogDescription>
+                Give your new workspace a name. Click save when you're done.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  Name
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="col-span-3"
+                  placeholder="My Awesome Project"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="githubRepoUrl" className="text-right">
+                  GitHub Repo
+                </Label>
+                <Input
+                  id="githubRepoUrl"
+                  value={githubRepoUrl}
+                  onChange={(e) => setGithubRepoUrl(e.target.value)}
+                  className="col-span-3"
+                  placeholder="https://github.com/user/repo"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="gitCommitSha" className="text-right">
+                  Commit SHA
+                </Label>
+                <Input
+                  id="gitCommitSha"
+                  value={gitCommitSha}
+                  onChange={(e) => setGitCommitSha(e.target.value)}
+                  className="col-span-3"
+                  placeholder="a1b2c3d"
+                />
+              </div>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="githubRepoUrl" className="text-right">
-                GitHub Repo
-              </Label>
-              <Input
-                id="githubRepoUrl"
-                value={githubRepoUrl}
-                onChange={(e) => setGithubRepoUrl(e.target.value)}
-                className="col-span-3"
-                placeholder="https://github.com/user/repo"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="gitCommitSha" className="text-right">
-                Commit SHA
-              </Label>
-              <Input
-                id="gitCommitSha"
-                value={gitCommitSha}
-                onChange={(e) => setGitCommitSha(e.target.value)}
-                className="col-span-3"
-                placeholder="a1b2c3d"
-              />
-            </div>
-          </div>
-          {isGithubPartiallyFilled && (
-            <p className="text-yellow-500 text-sm text-center pb-4">
-              You must provide both a GitHub URL and a commit SHA.
-            </p>
-          )}
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={isLoading || !!isGithubPartiallyFilled}
-            >
-              {isLoading ? 'Creating...' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            {isGithubPartiallyFilled && (
+              <p className="text-yellow-500 text-sm text-center pb-4">
+                You must provide both a GitHub URL and a commit SHA.
+              </p>
+            )}
+            {error && (
+              <p className="text-red-500 text-sm text-center">{error}</p>
+            )}
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={isLoading || !!isGithubPartiallyFilled}
+              >
+                {isLoading ? 'Creating...' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={isConfirmationVisible}
+        onOpenChange={setConfirmationVisible}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Once you add the GitHub repository and commit SHA, you will not be
+              able to edit them later. This action is irreversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={proceedWithCreate}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 } 

@@ -55,6 +55,15 @@ export async function createWorkspace(
     git_commit_sha?: string;
   }
 ): Promise<Workspace> {
+  if (
+    (params.github_repo_url && !params.git_commit_sha) ||
+    (!params.github_repo_url && params.git_commit_sha)
+  ) {
+    throw new Error(
+      'Both GitHub repository URL and commit SHA must be provided together.'
+    );
+  }
+
   const { data, error } = await client
     .from('workspaces')
     .insert({
@@ -92,6 +101,48 @@ export async function updateWorkspace(
   }
 ): Promise<Workspace> {
   const { workspaceId, userId, ...updateData } = params;
+
+  const { data: existingWorkspace, error: fetchError } = await client
+    .from('workspaces')
+    .select('github_repo_url, git_commit_sha')
+    .eq('id', workspaceId)
+    .eq('user_id', userId)
+    .single();
+
+  if (fetchError) {
+    console.error('Error fetching workspace for update:', fetchError);
+    throw new Error('Could not fetch workspace for update.');
+  }
+
+  if (
+    existingWorkspace.github_repo_url &&
+    updateData.github_repo_url &&
+    existingWorkspace.github_repo_url !== updateData.github_repo_url
+  ) {
+    throw new Error(
+      'GitHub repository URL has already been set and cannot be changed.'
+    );
+  }
+
+  if (
+    existingWorkspace.git_commit_sha &&
+    updateData.git_commit_sha &&
+    existingWorkspace.git_commit_sha !== updateData.git_commit_sha
+  ) {
+    throw new Error('Git commit SHA has already been set and cannot be changed.');
+  }
+
+  // Combine existing and new data to check the final state
+  const finalData = { ...existingWorkspace, ...updateData };
+  if (
+    (finalData.github_repo_url && !finalData.git_commit_sha) ||
+    (!finalData.github_repo_url && finalData.git_commit_sha)
+  ) {
+    throw new Error(
+      'Both GitHub repository URL and commit SHA must be provided together.'
+    );
+  }
+
   const { data, error } = await client
     .from('workspaces')
     .update(updateData)
