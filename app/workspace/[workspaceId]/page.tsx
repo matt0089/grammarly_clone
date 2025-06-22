@@ -47,7 +47,7 @@ export default function WorkspacePage() {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const params = useParams();
   const workspaceId = params.workspaceId as string;
-  const supabase = createClient();
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     if (workspaceId) {
