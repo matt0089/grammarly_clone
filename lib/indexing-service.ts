@@ -28,7 +28,14 @@ function extractFunctionNames(filePath: string, fileContent: string) {
 
   const parser = new Parser();
   parser.setLanguage(language);
-  const tree = parser.parse(fileContent);
+  let tree;
+  try {
+    tree = parser.parse(fileContent, undefined, { bufferSize: 1024 * 1024 });
+  } catch (error) {
+    console.error(`Error parsing file ${filePath}:`, error);
+    return [];
+  }
+
   const functions: { functionName: string; lineNumber: number }[] = [];
 
   function findFunctions(node: Parser.SyntaxNode) {
