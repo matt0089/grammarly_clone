@@ -35,6 +35,9 @@ export default function CreateWorkspaceModal() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  const isGithubPartiallyFilled =
+    (githubRepoUrl && !gitCommitSha) || (!githubRepoUrl && gitCommitSha);
+
   /**
    * Handles the form submission to create a new workspace.
    */
@@ -42,6 +45,12 @@ export default function CreateWorkspaceModal() {
     event.preventDefault();
     if (!name.trim()) {
       setError('Workspace name cannot be empty.');
+      return;
+    }
+    if (isGithubPartiallyFilled) {
+      setError(
+        'Please provide both a GitHub repository URL and a commit SHA, or neither.'
+      );
       return;
     }
     setIsLoading(true);
@@ -128,9 +137,17 @@ export default function CreateWorkspaceModal() {
               />
             </div>
           </div>
+          {isGithubPartiallyFilled && (
+            <p className="text-yellow-500 text-sm text-center pb-4">
+              You must provide both a GitHub URL and a commit SHA.
+            </p>
+          )}
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading || !!isGithubPartiallyFilled}
+            >
               {isLoading ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>

@@ -112,6 +112,9 @@ export async function PUT(
     console.error(`Error in PUT /api/workspaces/${workspaceId}:`, error);
     const errorMessage =
       error instanceof Error ? error.message : 'An unknown error occurred';
+    if (errorMessage.includes('cannot be changed')) {
+      return NextResponse.json({ error: errorMessage }, { status: 403 });
+    }
     return NextResponse.json(
       { error: 'Failed to update workspace', details: errorMessage },
       { status: 500 }

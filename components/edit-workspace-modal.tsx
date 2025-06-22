@@ -41,10 +41,19 @@ export default function EditWorkspaceModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isGithubPartiallyFilled =
+    (githubRepoUrl && !gitCommitSha) || (!githubRepoUrl && gitCommitSha);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) {
       setError('Workspace name cannot be empty.');
+      return;
+    }
+    if (isGithubPartiallyFilled) {
+      setError(
+        'Please provide both a GitHub repository URL and a commit SHA, or neither.'
+      );
       return;
     }
     setIsLoading(true);
@@ -115,6 +124,7 @@ export default function EditWorkspaceModal({
                 onChange={(e) => setGithubRepoUrl(e.target.value)}
                 className="col-span-3"
                 placeholder="https://github.com/user/repo"
+                disabled={!!workspace.github_repo_url}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -127,12 +137,21 @@ export default function EditWorkspaceModal({
                 onChange={(e) => setGitCommitSha(e.target.value)}
                 className="col-span-3"
                 placeholder="a1b2c3d"
+                disabled={!!workspace.git_commit_sha}
               />
             </div>
           </div>
+          {isGithubPartiallyFilled && (
+            <p className="text-yellow-500 text-sm text-center pb-4">
+              You must provide both a GitHub URL and a commit SHA.
+            </p>
+          )}
           {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading || !!isGithubPartiallyFilled}
+            >
               {isLoading ? 'Saving...' : 'Save changes'}
             </Button>
           </DialogFooter>
