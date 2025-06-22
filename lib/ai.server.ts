@@ -5,7 +5,7 @@
 
 import 'server-only';
 
-import { streamText } from 'ai';
+import { streamText, generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 
 /**
@@ -41,4 +41,42 @@ export async function generateFunctionDocumentationStream(
   });
 
   return textStream;
+}
+
+/**
+ * Generates a value for a document property using AI.
+ *
+ * @param {string} content - The content of the document.
+ * @param {'title' | 'type' | 'goal'} property - The property to generate.
+ * @returns {Promise<string>} The generated value.
+ */
+export async function generateDocumentProperty(
+  content: string,
+  property: 'title' | 'type' | 'goal',
+): Promise<string> {
+  const propertyConstraints = {
+    title: 'no more than 6 words',
+    type: 'no more than 4 words',
+    goal: 'a concise description of around 30 words',
+  };
+
+  const prompt = `
+    Based on the following document content, generate a suitable value for the document's "${property}".
+
+    The generated ${property} should be ${propertyConstraints[property]}.
+
+    Return only the generated text, with no extra formatting, labels, or quotation marks.
+
+    Document Content:
+    """
+    ${content}
+    """
+  `;
+
+  const { text } = await generateText({
+    model: openai('chatgpt-4o-latest'),
+    prompt,
+  });
+
+  return text;
 } 

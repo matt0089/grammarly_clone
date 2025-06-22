@@ -393,7 +393,7 @@ export default function WorkspacePage() {
                   </h1>
                 )}
                 <div className="flex items-center gap-2">
-                  <DocumentMetadataModal document={selectedDocument} onMetadataUpdate={handleMetadataUpdate} />
+                  <DocumentMetadataModal document={selectedDocument} documentContent={documentContent} onMetadataUpdate={handleMetadataUpdate} />
                   <Button onClick={handleGenerateDocs} disabled={!selectedText || isGeneratingDocs}>
                     {isGeneratingDocs ? 'Generating...' : 'Generate Docs'}
                   </Button>
