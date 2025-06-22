@@ -16,7 +16,7 @@ import { cookies } from 'next/headers';
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { workspaceId: string } }
+  context: { params: Promise<{ workspaceId: string }> }
 ) {
   const supabase = createClient();
   const {
@@ -27,7 +27,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { workspaceId } = params;
+  const { workspaceId } = await context.params;
 
   if (!workspaceId) {
     return NextResponse.json({ error: 'Workspace ID is required' }, { status: 400 });
@@ -51,7 +51,7 @@ export async function DELETE(
  */
 export async function PUT(
   request: Request,
-  { params }: { params: { workspaceId: string } }
+  context: { params: Promise<{ workspaceId: string }> }
 ) {
   const supabase = createClient();
   const {
@@ -62,7 +62,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { workspaceId } = params;
+  const { workspaceId } = await context.params;
   const { name, github_repo_url, git_commit_sha } = await request.json();
 
   if (!workspaceId) {
