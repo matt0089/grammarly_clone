@@ -331,10 +331,25 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-3">
           <FileText className="w-6 h-6 text-primary" />
           <h1 className="text-xl font-semibold">DocWise AI</h1>
-          {workspace && (workspace.indexing_status === 'PENDING' || workspace.indexing_status === 'INDEXING') && (
+          {workspace && (workspace.indexing_status === 'PENDING') && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
+              <span>Repository indexing not started.  Return to the dashboard, and edit the workspace to start</span>
+            </div>
+          )}
+          {workspace && (workspace.indexing_status === 'INDEXING') && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>
-              <span>Indexing repository...</span>
+              <span>Indexing repository... revisit this page in a few minutes until ready</span>
+            </div>
+          )}
+          {workspace && (workspace.indexing_status === 'COMPLETED') && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
+              <span>Indexing complete!</span>
+            </div>
+          )}
+          {workspace && (workspace.indexing_status === 'FAILED') && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
+              <span>Indexing failed.  Please try again with a new workspace</span>
             </div>
           )}
         </div>
@@ -396,7 +411,8 @@ export default function WorkspacePage() {
                     {selectedDocument.title}
                   </h1>
                 )}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-4">
+                  <ReadabilityDisplay result={readabilityResult} wordCount={wordCount} />
                   <DocumentMetadataModal document={selectedDocument} documentContent={documentContent} onMetadataUpdate={handleMetadataUpdate} />
                   <Button onClick={handleGenerateDocs} disabled={!selectedText || isGeneratingDocs}>
                     {isGeneratingDocs ? 'Generating...' : 'Generate Docs'}
@@ -414,7 +430,6 @@ export default function WorkspacePage() {
                 className="flex-1 w-full h-full p-4 text-lg border rounded-md"
                 placeholder="Start writing..."
               />
-              <ReadabilityDisplay result={readabilityResult} wordCount={wordCount} />
             </>
           ) : (
             <div className="flex items-center justify-center h-full">

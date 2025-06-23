@@ -11,9 +11,9 @@ export function ReadabilityDisplay({ result, wordCount }: ReadabilityDisplayProp
   if (!result) {
     if (wordCount < 30) {
       return (
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600">Readability</span>
-          <span className="text-sm text-gray-400">Need 30+ words</span>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600 dark:text-gray-400">Readability:</span>
+          <span className="text-gray-400 dark:text-gray-500">Need 30+ words</span>
         </div>
       )
     }
@@ -34,22 +34,20 @@ export function ReadabilityDisplay({ result, wordCount }: ReadabilityDisplayProp
   }
 
   return (
-    <div className="flex justify-between items-center">
-      <span className="text-sm text-gray-600">Readability</span>
-      <div className="flex items-center gap-2">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="outline" className={`text-xs cursor-help ${getColorClasses(result.color)}`}>
-                {result.score}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{result.description}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-gray-600 dark:text-gray-400">Readability:</span>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className={`cursor-help ${getColorClasses(result.color)}`}>
+              {result.score}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{result.description}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   )
 }
